@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_SUPABASE_URL } from '@/lib/config';
 
-const protectedPrefixes = ['/home', '/scanner', '/stats', '/profile', '/recipe'];
+const protectedPrefixes = ['/home', '/recipes', '/scanner', '/stats', '/profile', '/recipe'];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({

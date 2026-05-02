@@ -27,6 +27,13 @@ export interface PantryItem {
   created_at: string;
 }
 
+export interface BarcodePreview {
+  barcode: string;
+  name: string;
+  kcal: number | null;
+  image_url?: string | null;
+}
+
 export interface Recipe {
   title: string;
   description: string;

@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ChefHat, Flame, PackageOpen, Sparkles } from 'lucide-react';
-import RecipeDiscovery from '@/components/recipe/RecipeDiscovery';
+import { ArrowRight, ChefHat, PackageOpen, ScrollText, Sparkles } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase';
 import { resolveProfileTier, STRIPE_TIERS, type PantryItem, type Profile, type RecipeHistory } from '@/lib/types';
 
@@ -63,29 +62,38 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.28em] text-yellow-300/75">Dashboard</p>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold text-white sm:text-4xl">FridgeChef Command Center</h1>
-            <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-3">
-              <ChefHat className="h-5 w-5 text-yellow-300" />
+      <section className="panel overflow-hidden p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.28em] text-yellow-300/75">Dashboard</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-semibold text-white sm:text-4xl">FridgeChef Command Center</h1>
+              <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-3">
+                <ChefHat className="h-5 w-5 text-yellow-300" />
+              </div>
             </div>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-400">
+              Clean pantry overview, faster recipe generation, and mobile-first cooking flows in one place.
+            </p>
           </div>
         </div>
-      </section>
 
-      <section className="panel overflow-hidden p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-yellow-100">{tierConfig.label} tier</p>
             <p className="text-xs text-yellow-100/70">
-              {tierConfig.itemLimit} pantry items / {tierConfig.recipeSuggestions} recipe suggestions
+              {tierConfig.itemLimit} pantry items / {Math.min(tierConfig.recipeSuggestions, 3)} featured recipes shown
             </p>
           </div>
-          <Link href="/profile" className="text-sm font-medium text-yellow-200 hover:text-yellow-100">
-            Manage
-          </Link>
+          <div className="flex gap-3">
+            <Link href="/recipes" className="glow-button gap-2">
+              Recipe Studio
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link href="/profile" className="secondary-button">
+              Manage
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -97,10 +105,10 @@ export default function HomePage() {
           </div>
           <div className="mt-4 space-y-3">
             {pantry.length ? (
-              pantry.slice(0, 4).map((item) => (
+              pantry.slice(0, 5).map((item) => (
                 <div key={item.id} className="flex items-center justify-between rounded-2xl bg-black/30 px-4 py-3 text-sm">
-                  <span className="text-zinc-100">{item.name}</span>
-                  <span className="text-zinc-500">{item.kcal ?? 0} kcal</span>
+                  <span className="truncate pr-3 text-zinc-100">{item.name}</span>
+                  <span className="whitespace-nowrap text-zinc-500">{item.kcal ?? 0} kcal</span>
                 </div>
               ))
             ) : (
@@ -132,16 +140,12 @@ export default function HomePage() {
               <p className="text-sm leading-6 text-zinc-400">Generate your first AI recipe pack to populate this feed.</p>
             )}
           </div>
-          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
-            <div className="flex items-center gap-2">
-              <Flame className="h-4 w-4 text-yellow-300" />
-              Calorie filters are enforced before the top 5 are shown.
-            </div>
-          </div>
+          <Link href="/recipes" className="secondary-button mt-5 w-full justify-center gap-2">
+            <ScrollText className="h-4 w-4" />
+            Open Recipe Studio
+          </Link>
         </div>
       </section>
-
-      <RecipeDiscovery pantry={pantry} recipeLimit={tierConfig.recipeSuggestions} />
     </div>
   );
 }

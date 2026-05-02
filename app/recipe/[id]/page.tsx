@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion, useScroll, useSpring } from 'framer-motion';
-import { AudioLines, Flame } from 'lucide-react';
+import { AudioLines, Flame, ListChecks } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import type { Recipe, RecipeHistory } from '@/lib/types';
@@ -79,24 +79,33 @@ export default function RecipeDetailPage() {
   }
 
   return (
-    <div className="space-y-6 pb-6">
+    <div className="space-y-4 pb-6">
       <motion.div className="fixed left-0 right-0 top-0 z-50 h-1 origin-left bg-yellow-300" style={{ scaleX: progress }} />
 
-      <section className="panel p-6">
+      <section className="panel p-5 sm:p-6">
         <p className="text-xs uppercase tracking-[0.26em] text-yellow-300/75">Chef Tutorial</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">{recipe.title}</h1>
-        <p className="mt-4 text-sm leading-6 text-zinc-400">{recipe.description}</p>
-        <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-yellow-400/20 bg-yellow-400/10 px-4 py-2 text-sm text-yellow-100">
-          <Flame className="h-4 w-4" />
-          {recipe.kcal_per_serving} kcal per serving
+        <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">{recipe.title}</h1>
+        <p className="mt-3 text-sm leading-6 text-zinc-400">{recipe.description}</p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-2 rounded-full border border-yellow-400/20 bg-yellow-400/10 px-4 py-2 text-yellow-100">
+            <Flame className="h-4 w-4" />
+            {recipe.kcal_per_serving} kcal per serving
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-zinc-300">
+            <ListChecks className="h-4 w-4 text-yellow-300" />
+            {(recipe.prep?.length || 0) + recipe.steps.length} guided steps
+          </span>
         </div>
       </section>
 
-      <button onClick={playAudio} className="glow-button w-full gap-2">
-        <AudioLines className="h-4 w-4" />
-        {playing ? 'Playing Audio...' : 'Play Audio'}
-      </button>
-      {audioUrl ? <audio src={audioUrl} autoPlay controls className="w-full" /> : null}
+      <div className="sticky top-20 z-30 space-y-3">
+        <button onClick={playAudio} className="glow-button w-full gap-2">
+          <AudioLines className="h-4 w-4" />
+          {playing ? 'Playing Audio...' : 'Play Audio'}
+        </button>
+        {audioUrl ? <audio src={audioUrl} autoPlay controls className="panel w-full p-3" /> : null}
+      </div>
 
       <TutorialSection title="Ingredients" items={recipe.ingredients} />
       {recipe.prep?.length ? <TutorialSection title="Prep" items={recipe.prep} /> : null}
@@ -117,11 +126,16 @@ function TutorialSection({
   const ListTag = ordered ? 'ol' : 'ul';
 
   return (
-    <section className="panel border-t border-yellow-400/20 p-6">
-      <h2 className="mb-4 text-xl font-semibold text-white">{title}</h2>
+    <section className="panel p-5 sm:p-6">
+      <div className="mb-4 border-b border-yellow-400/20 pb-3">
+        <h2 className="text-xl font-semibold text-white">{title}</h2>
+      </div>
       <ListTag className="space-y-3 text-sm leading-7 text-zinc-300">
         {items.map((item, index) => (
-          <li key={`${title}-${index}`} className={ordered ? 'list-decimal ml-5' : ''}>
+          <li
+            key={`${title}-${index}`}
+            className={ordered ? 'ml-5 list-decimal rounded-2xl bg-black/20 px-4 py-3 marker:text-yellow-300' : 'rounded-2xl bg-black/20 px-4 py-3'}
+          >
             {renderHighlightedText(item)}
           </li>
         ))}

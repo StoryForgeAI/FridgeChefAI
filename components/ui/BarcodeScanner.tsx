@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScanLine, X } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase';
-import type { PantryItem } from '@/lib/types';
+import type { BarcodePreview, PantryItem } from '@/lib/types';
 
 export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) => void }) {
   const [scanning, setScanning] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [preview, setPreview] = useState<BarcodePreview | null>(null);
   const scannerRef = useRef<any>(null);
+  const scanLockRef = useRef(false);
 
   useEffect(() => {
     if (!scanning) {
@@ -29,6 +31,12 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         async (decodedText: string) => {
+          if (scanLockRef.current) {
+            return;
+          }
+
+          scanLockRef.current = true;
+          await stopScanner();
           await handleScan(decodedText);
         },
         () => {}
@@ -67,22 +75,63 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
     try {
       const supabase = createBrowserClient();
       const { data, error: invokeError } = await supabase.functions.invoke('process-barcode', {
-        body: { barcode }
+        body: {
+          barcode,
+          mode: 'preview'
+        }
       });
 
       if (invokeError) {
         throw new Error(invokeError.message || 'Failed to process barcode.');
       }
 
-      onAdd(data as PantryItem);
-      window.dispatchEvent(new Event('fridgechef:profile-refresh'));
+      setPreview(data as BarcodePreview);
       setScanning(false);
-      await stopScanner();
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : 'Failed to process barcode. Please try again.');
+      scanLockRef.current = false;
     } finally {
       setProcessing(false);
     }
+  }
+
+  async function confirmAdd() {
+    if (!preview) {
+      return;
+    }
+
+    setProcessing(true);
+    setError('');
+
+    try {
+      const supabase = createBrowserClient();
+      const { data, error: invokeError } = await supabase.functions.invoke('process-barcode', {
+        body: {
+          mode: 'add',
+          ...preview
+        }
+      });
+
+      if (invokeError) {
+        throw new Error(invokeError.message || 'Failed to add pantry item.');
+      }
+
+      onAdd(data as PantryItem);
+      window.dispatchEvent(new Event('fridgechef:profile-refresh'));
+      setPreview(null);
+      scanLockRef.current = false;
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : 'Failed to add pantry item.');
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  function closePreview() {
+    setPreview(null);
+    setProcessing(false);
+    setError('');
+    scanLockRef.current = false;
   }
 
   return (
@@ -96,6 +145,7 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
           <button
             onClick={async () => {
               setScanning(false);
+              scanLockRef.current = false;
               await stopScanner();
             }}
             className="absolute right-4 top-4 z-30 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/60 text-zinc-100"
@@ -104,13 +154,59 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
           </button>
         </div>
       ) : (
-        <button onClick={() => setScanning(true)} className="glow-button w-full gap-2">
+        <button
+          onClick={() => {
+            setScanning(true);
+            setError('');
+            scanLockRef.current = false;
+          }}
+          className="glow-button w-full gap-2"
+        >
           <ScanLine className="h-4 w-4" />
           Start Scanning
         </button>
       )}
-      {processing ? <p className="mt-3 text-sm text-zinc-300">Processing barcode...</p> : null}
+
+      {processing && !preview ? <p className="mt-3 text-sm text-zinc-300">Processing barcode...</p> : null}
       {error ? <p className="mt-3 text-sm text-red-200">{error}</p> : null}
+
+      {preview ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+          <div className="panel w-full max-w-md overflow-hidden p-0">
+            <div className="relative aspect-square w-full overflow-hidden bg-zinc-950">
+              {preview.image_url ? (
+                <img src={preview.image_url} alt={preview.name} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,215,0,0.18),_transparent_35%)]">
+                  <div className="rounded-[2rem] border border-yellow-400/20 bg-yellow-400/10 p-6">
+                    <ScanLine className="h-10 w-10 text-yellow-300" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4 p-5 sm:p-6">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-yellow-300/75">Barcode Found</p>
+                <h3 className="mt-2 text-2xl font-semibold text-white">{preview.name}</h3>
+                <p className="mt-2 text-sm text-zinc-400">{preview.kcal ?? 0} kcal per 100g</p>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={confirmAdd} disabled={processing} className="glow-button w-full disabled:opacity-60">
+                  {processing ? 'Adding...' : 'Add'}
+                </button>
+                <button
+                  onClick={closePreview}
+                  className="w-full rounded-2xl border border-white/10 px-4 py-3 font-medium text-zinc-300 transition hover:border-yellow-400/40 hover:text-yellow-100"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

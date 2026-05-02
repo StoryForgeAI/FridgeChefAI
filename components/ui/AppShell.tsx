@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import BottomNav from './BottomNav';
 import CreditsDock from './CreditsDock';
 
-const appRoutes = ['/home', '/scanner', '/stats', '/profile'];
+const appRoutes = ['/home', '/recipes', '/scanner', '/stats', '/profile'];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

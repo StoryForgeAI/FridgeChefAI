@@ -35,14 +35,23 @@ export default function ProfilePage() {
     setLoading(true);
     setActionError('');
 
-    const { error } = await supabase.functions.invoke('convert-credits', {
+    const { data, error } = await supabase.functions.invoke('convert-credits', {
       body: {}
     });
 
     if (error) {
       setActionError(error.message || 'Credit conversion failed.');
     } else {
-      await loadProfile();
+      if (data?.profile && profile) {
+        setProfile({
+          ...profile,
+          credits: data.profile.credits,
+          tss_credits: data.profile.tss_credits
+        });
+      } else {
+        await loadProfile();
+      }
+
       window.dispatchEvent(new Event('fridgechef:profile-refresh'));
     }
 

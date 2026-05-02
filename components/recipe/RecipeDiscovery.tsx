@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ChefHat, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCheck, ChefHat, Sparkles } from 'lucide-react';
 import RecipeCard from './RecipeCard';
 import RecipeConfig from './RecipeConfig';
 import type { PantryItem, Recipe } from '@/lib/types';
@@ -9,18 +9,33 @@ import { createBrowserClient } from '@/lib/supabase';
 
 export default function RecipeDiscovery({
   pantry,
-  recipeLimit
+  recipeLimit,
+  resultLimit = 3
 }: {
   pantry: PantryItem[];
   recipeLimit: number;
+  resultLimit?: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [expandedCard, setExpandedCard] = useState<number | null>(0);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [historyId, setHistoryId] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const pantryNames = useMemo(() => pantry.map((item) => item.name), [pantry]);
+  useEffect(() => {
+    setSelectedIds(pantry.map((item) => item.id));
+  }, [pantry]);
+
+  const selectedItems = useMemo(
+    () => pantry.filter((item) => selectedIds.includes(item.id)),
+    [pantry, selectedIds]
+  );
+  const pantryNames = useMemo(() => selectedItems.map((item) => item.name), [selectedItems]);
+
+  const toggleIngredient = (id: string) => {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]));
+  };
 
   const handleGenerate = async ({
     servings,
@@ -32,7 +47,7 @@ export default function RecipeDiscovery({
     allergies: string[];
   }) => {
     if (!pantryNames.length) {
-      setError('Add a few pantry items before generating recipes.');
+      setError('Choose at least one ingredient before generating recipes.');
       return;
     }
 
@@ -65,7 +80,7 @@ export default function RecipeDiscovery({
       }
 
       setHistoryId(payload.historyId);
-      setRecipes(payload.recipes.slice(0, recipeLimit));
+      setRecipes(payload.recipes.slice(0, Math.min(recipeLimit, resultLimit)));
       setExpandedCard(0);
       window.dispatchEvent(new Event('fridgechef:profile-refresh'));
     } catch (generationError) {
@@ -90,8 +105,41 @@ export default function RecipeDiscovery({
       <div className="panel p-5">
         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
           <Sparkles className="h-4 w-4 text-yellow-300" />
-          Using {pantryNames.length} pantry ingredients as source material
+          Select the pantry ingredients you want to cook with
         </div>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button onClick={() => setSelectedIds(pantry.map((item) => item.id))} className="secondary-button px-4 py-2 text-sm">
+            <CheckCheck className="mr-2 h-4 w-4" />
+            Use All
+          </button>
+          <button
+            onClick={() => setSelectedIds([])}
+            className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:border-yellow-400/40 hover:text-yellow-100"
+          >
+            Clear
+          </button>
+        </div>
+
+        <div className="mb-5 flex flex-wrap gap-2">
+          {pantry.map((item) => {
+            const active = selectedIds.includes(item.id);
+            return (
+              <button
+                key={item.id}
+                onClick={() => toggleIngredient(item.id)}
+                className={`rounded-full px-3 py-2 text-xs transition ${
+                  active
+                    ? 'bg-yellow-400 text-black shadow-lg shadow-yellow-500/20'
+                    : 'border border-white/10 bg-white/5 text-zinc-300 hover:border-yellow-400/40'
+                }`}
+              >
+                {item.name}
+              </button>
+            );
+          })}
+        </div>
+
         <RecipeConfig onGenerate={handleGenerate} loading={loading} />
       </div>
 

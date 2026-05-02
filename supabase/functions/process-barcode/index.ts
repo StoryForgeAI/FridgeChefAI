@@ -34,7 +34,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: corsHeaders });
   }
 
-  const { barcode } = await req.json();
+  const { barcode, mode = 'preview', name: incomingName, kcal: incomingKcal, image_url: incomingImageUrl } = await req.json();
   if (!barcode) {
     return new Response(JSON.stringify({ error: 'Barcode required' }), { status: 400, headers: corsHeaders });
   }
@@ -69,16 +69,20 @@ serve(async (req) => {
     });
   }
 
-  let name: string | undefined;
-  let kcal: number | undefined;
+  let name: string | undefined = incomingName;
+  let kcal: number | undefined = typeof incomingKcal === 'number' ? incomingKcal : undefined;
+  let imageUrl: string | null | undefined = incomingImageUrl;
 
-  try {
-    const offResponse = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
-    const offData = await offResponse.json();
-    name = offData.product?.product_name;
-    kcal = Number(offData.product?.nutriments?.['energy-kcal_100g']) || 0;
-  } catch {
-    // Fall through to OpenAI fallback.
+  if (mode === 'preview' || !name) {
+    try {
+      const offResponse = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      const offData = await offResponse.json();
+      name = offData.product?.product_name || offData.product?.generic_name;
+      kcal = Number(offData.product?.nutriments?.['energy-kcal_100g']) || 0;
+      imageUrl = offData.product?.image_front_url || offData.product?.image_url || null;
+    } catch {
+      // Fall through to OpenAI fallback.
+    }
   }
 
   if (!name) {
@@ -101,6 +105,20 @@ serve(async (req) => {
       name = 'Unknown Product';
       kcal = 0;
     }
+  }
+
+  if (mode === 'preview') {
+    return new Response(
+      JSON.stringify({
+        barcode,
+        name: name || 'Unknown Product',
+        kcal: kcal || 0,
+        image_url: imageUrl || null
+      }),
+      {
+        headers: corsHeaders
+      }
+    );
   }
 
   const { data: pantryItem, error: insertError } = await supabase

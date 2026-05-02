@@ -65,7 +65,13 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: updateError.message }), { status: 500, headers: corsHeaders });
   }
 
-  return new Response(JSON.stringify({ success: true, message: 'Converted 20 credits to 1 TSS credit' }), {
+  const { data: updatedProfile } = await supabase
+    .from('profiles')
+    .select('credits, tss_credits')
+    .eq('id', user.id)
+    .single();
+
+  return new Response(JSON.stringify({ success: true, profile: updatedProfile }), {
     headers: corsHeaders
   });
 });

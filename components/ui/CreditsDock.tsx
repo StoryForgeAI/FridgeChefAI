@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import type { Profile } from '@/lib/types';
 
-const appPrefixes = ['/home', '/scanner', '/stats', '/profile', '/recipe'];
+const appPrefixes = ['/home', '/recipes', '/scanner', '/stats', '/profile', '/recipe'];
 
 export default function CreditsDock() {
   const pathname = usePathname();
