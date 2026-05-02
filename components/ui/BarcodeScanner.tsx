@@ -41,6 +41,23 @@ export default function BarcodeScanner({ onAdd, onPreviewStateChange }: {
           }
 
           scanLockRef.current = true;
+          setProcessing(true);
+          setCountdown(3);
+
+          countdownRef.current = setInterval(() => {
+            setCountdown((prev) => {
+              if (prev <= 1) {
+                if (countdownRef.current) {
+                  clearInterval(countdownRef.current);
+                }
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+
           await stopScanner();
           await handleScan(decodedText);
         },
@@ -75,24 +92,8 @@ export default function BarcodeScanner({ onAdd, onPreviewStateChange }: {
     }
 
     setError('');
-    setProcessing(true);
-    setCountdown(3);
-
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          if (countdownRef.current) {
-            clearInterval(countdownRef.current);
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
       const supabase = createBrowserClient();
       const { data, error: invokeError } = await supabase.functions.invoke('process-barcode', {
         body: {
@@ -197,12 +198,15 @@ export default function BarcodeScanner({ onAdd, onPreviewStateChange }: {
         </button>
       )}
 
-       {processing && !preview ? (
-         <div className="mt-3 flex items-center gap-2 text-sm text-zinc-300">
-           <Timer className="h-4 w-4 animate-spin" />
-           {countdown > 0 ? `Processing in ${countdown}...` : 'Processing barcode...'}
-         </div>
-       ) : null}
+      {scanning && countdown > 0 ? (
+        <div className="mt-3 flex items-center gap-2 text-sm text-zinc-300">
+          <Timer className="h-4 w-4 animate-spin" />
+          Processing in {countdown}...
+        </div>
+      ) : null}
+      {processing && !preview && countdown === 0 ? (
+        <p className="mt-3 text-sm text-zinc-300">Analyzing barcode...</p>
+      ) : null}
        {error ? <p className="mt-3 text-sm text-red-200">{error}</p> : null}
 
        {preview ? (
