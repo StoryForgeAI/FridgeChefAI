@@ -30,16 +30,18 @@ export default function RecipeConfig({
   };
 
   return (
-    <div className="bg-white rounded-lg p-4 shadow space-y-4">
+    <div className="space-y-5">
       <div>
-        <label className="block text-sm font-medium mb-2">Servings</label>
+        <label className="mb-2 block text-sm font-medium text-zinc-200">Servings</label>
         <div className="flex flex-wrap gap-2">
           {SERVING_OPTIONS.map((num) => (
             <button
               key={num}
               onClick={() => setServings(num)}
-              className={`px-4 py-2 rounded-full text-sm ${
-                servings === num ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
+              className={`rounded-full px-4 py-2 text-sm transition ${
+                servings === num
+                  ? 'bg-yellow-400 text-black shadow-lg shadow-yellow-500/20'
+                  : 'border border-white/10 bg-white/5 text-zinc-300 hover:border-yellow-400/40'
               }`}
             >
               {num}
@@ -48,24 +50,26 @@ export default function RecipeConfig({
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium mb-2">Max Calories (optional)</label>
+        <label className="mb-2 block text-sm font-medium text-zinc-200">Max Calories (optional)</label>
         <input
           type="number"
           value={maxCalories}
           onChange={(e) => setMaxCalories(e.target.value)}
           placeholder="e.g. 500"
-          className="w-full border border-gray-300 rounded-lg p-2 text-sm"
+          className="w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-yellow-400/60"
         />
       </div>
       <div>
-        <label className="block text-sm font-medium mb-2">Allergies</label>
+        <label className="mb-2 block text-sm font-medium text-zinc-200">Allergies</label>
         <div className="flex flex-wrap gap-2">
           {ALLERGY_OPTIONS.map((allergy) => (
             <button
               key={allergy}
               onClick={() => toggleAllergy(allergy)}
-              className={`px-3 py-1 rounded-full text-xs ${
-                allergies.includes(allergy) ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-700'
+              className={`rounded-full px-3 py-2 text-xs transition ${
+                allergies.includes(allergy)
+                  ? 'bg-yellow-400 text-black'
+                  : 'border border-white/10 bg-white/5 text-zinc-300 hover:border-yellow-400/40'
               }`}
             >
               {allergy}
@@ -76,7 +80,7 @@ export default function RecipeConfig({
       <button
         onClick={handleSubmit}
         disabled={loading}
-        className="w-full bg-green-600 text-white py-3 rounded-lg font-medium disabled:opacity-50"
+        className="glow-button w-full disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? 'Generating...' : 'Generate Recipes'}
       </button>

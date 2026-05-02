@@ -1,37 +1,57 @@
 'use client';
+
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { BarChart3, House, ScanLine, UserCircle2 } from 'lucide-react';
 
 const navItems = [
-  { href: '/', label: 'Home', icon: '🏠' },
-  { href: '/scanner', label: 'Scanner', icon: '📷' },
-  { href: '/stats', label: 'Stats', icon: '📊' },
-  { href: '/profile', label: 'Profile', icon: '👤' }
+  { href: '/home', label: 'Home', icon: House },
+  { href: '/scanner', label: 'Scanner', icon: ScanLine },
+  { href: '/stats', label: 'Stats', icon: BarChart3 },
+  { href: '/profile', label: 'Profile', icon: UserCircle2 }
 ];
-
-const validPaths = navItems.map(item => item.href);
 
 export default function BottomNav() {
   const pathname = usePathname();
-  
-  if (!validPaths.includes(pathname)) return null;
-  
+
+  const showNav = navItems.some((item) => pathname === item.href) || pathname.startsWith('/recipe/');
+  if (!showNav) {
+    return null;
+  }
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 max-w-md mx-auto">
-      <div className="flex justify-around py-2">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex flex-col items-center py-1 px-3 text-xs ${
-              pathname === item.href ? 'text-blue-600' : 'text-gray-500'
-            }`}
-          >
-            <span className="text-xl mb-1">{item.icon}</span>
-            {item.label}
-          </Link>
-        ))}
+    <nav className="fixed inset-x-0 bottom-4 z-40 mx-auto w-[calc(100%-1.5rem)] max-w-md">
+      <div className="rounded-[1.75rem] border border-white/10 bg-zinc-950/70 px-2 py-2 shadow-2xl shadow-yellow-500/10 backdrop-blur-xl">
+        <div className="flex justify-around">
+          {navItems.map((item) => (
+            <NavItem key={item.href} item={item} active={pathname === item.href} />
+          ))}
+        </div>
       </div>
     </nav>
+  );
+}
+
+function NavItem({
+  item,
+  active
+}: {
+  item: (typeof navItems)[number];
+  active: boolean;
+}) {
+  const Icon = item.icon;
+
+  return (
+    <Link
+      href={item.href}
+      className={`flex min-w-[72px] flex-col items-center rounded-2xl px-3 py-2 text-[11px] font-medium transition ${
+        active
+          ? 'bg-yellow-400/12 text-yellow-300 shadow-lg shadow-yellow-500/20'
+          : 'text-zinc-500 hover:text-zinc-100'
+      }`}
+    >
+      <Icon className={`mb-1 h-5 w-5 ${active ? 'text-yellow-300' : 'text-zinc-400'}`} strokeWidth={2.1} />
+      {item.label}
+    </Link>
   );
 }
