@@ -8,6 +8,7 @@ export default function HomePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [pantry, setPantry] = useState<PantryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const supabase = createBrowserClient();
 
   useEffect(() => {
@@ -18,17 +19,21 @@ export default function HomePage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
+      
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(profileData);
+      
       const { data: pantryData } = await supabase.from('pantry_items').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
       setPantry(pantryData || []);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Load error:', e);
+      setError(e.message || 'Failed to load data');
     }
     setLoading(false);
   };
 
-  if (loading) return <div className="p-4">Loading...</div>;
+  if (loading) return <div className="p-4 text-center">Loading...</div>;
+  if (error) return <div className="p-4 text-center text-red-500">{error}</div>;
 
   const tierConfig = profile ? STRIPE_TIERS[profile.tier as keyof typeof STRIPE_TIERS] : null;
 
