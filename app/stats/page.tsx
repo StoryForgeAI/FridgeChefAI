@@ -107,6 +107,28 @@ export default function StatsPage() {
 
   const tierConfig = STRIPE_TIERS[resolveProfileTier(data.profile)];
 
+  const weeklyData = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(now);
+    date.setDate(date.getDate() - (6 - i));
+    date.setHours(0, 0, 0, 0);
+    const nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + 1);
+    
+    const calories = data.pantry
+      .filter(item => {
+        const itemDate = new Date(item.created_at);
+        return item.kcal && itemDate >= date && itemDate < nextDate;
+      })
+      .reduce((sum, item) => sum + (item.kcal ?? 0), 0);
+    
+    return {
+      day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      calories
+    };
+  });
+
+  const maxCalories = Math.max(...weeklyData.map(d => d.calories), 1);
+
   return (
     <div className="space-y-6">
       <section className="panel p-6">
@@ -171,6 +193,27 @@ export default function StatsPage() {
             <div key={ingredient} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
               <span className="text-zinc-100">{ingredient}</span>
               <span className="rounded-full bg-yellow-400/10 px-3 py-1 text-xs text-yellow-100">{count} uses</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel p-5">
+        <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+          <Flame className="h-4 w-4 text-yellow-300" />
+          Weekly Calorie Distribution
+        </div>
+        <div className="flex h-32 items-end gap-2">
+          {weeklyData.map((dayData, index) => (
+            <div key={index} className="flex-1 flex flex-col items-center gap-1">
+              <div 
+                className="w-full rounded-t-lg bg-yellow-400/80 transition-all duration-500"
+                style={{ 
+                  height: `${(dayData.calories / maxCalories) * 100}%`,
+                  minHeight: '4px'
+                }}
+              />
+              <span className="text-xs text-zinc-500">{dayData.day}</span>
             </div>
           ))}
         </div>

@@ -142,7 +142,6 @@ export default function BarcodeScanner({ onAdd, onPreviewStateChange }: {
         throw new Error(invokeError.message || 'Failed to add pantry item.');
       }
 
-      onAdd(data as PantryItem);
       window.dispatchEvent(new Event('fridgechef:profile-refresh'));
       setPreview(null);
       scanLockRef.current = false;

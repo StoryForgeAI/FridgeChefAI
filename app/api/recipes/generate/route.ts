@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   const { data: profileData } = await supabaseAdmin.from('profiles').select('*').eq('id', user.id).single();
   const profile = profileData as Profile | null;
-  if (!profile || profile.credits < 1) {
+  if (!profile || profile.credits < 10) {
     return NextResponse.json({ error: 'Insufficient credits' }, { status: 403 });
   }
 
@@ -73,7 +73,11 @@ export async function POST(req: NextRequest) {
       throw insertError || new Error('Failed to save recipe history.');
     }
 
-    await supabaseAdmin.from('profiles').update({ credits: profile.credits - 1 }).eq('id', user.id);
+    const newTssCredits = Math.max(0, (profile.tss_credits || 0) - 1);
+    await supabaseAdmin.from('profiles').update({ 
+      credits: profile.credits - 10,
+      tss_credits: newTssCredits
+    }).eq('id', user.id);
 
     const { data: stats } = await supabaseAdmin
       .from('stats')
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
         .from('stats')
         .update({
           total_recipes_generated: (stats.total_recipes_generated || 0) + 1,
-          total_credits_used: (stats.total_credits_used || 0) + 1
+          total_credits_used: (stats.total_credits_used || 0) + 10
         })
         .eq('user_id', user.id);
     }
