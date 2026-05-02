@@ -7,6 +7,7 @@ import type { PantryItem } from '@/lib/types';
 
 export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) => void }) {
   const [scanning, setScanning] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const scannerRef = useRef<any>(null);
 
@@ -56,41 +57,30 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
   }
 
   async function handleScan(barcode: string) {
-    if (!barcode) {
+    if (!barcode || processing) {
       return;
     }
 
     setError('');
+    setProcessing(true);
 
     try {
       const supabase = createBrowserClient();
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        throw new Error('You need to be logged in to scan.');
-      }
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-barcode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ barcode })
+      const { data, error: invokeError } = await supabase.functions.invoke('process-barcode', {
+        body: { barcode }
       });
 
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || 'Failed to process barcode.');
+      if (invokeError) {
+        throw new Error(invokeError.message || 'Failed to process barcode.');
       }
 
-      onAdd(payload);
+      onAdd(data as PantryItem);
       setScanning(false);
       await stopScanner();
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : 'Failed to process barcode. Please try again.');
+    } finally {
+      setProcessing(false);
     }
   }
 
@@ -118,6 +108,7 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
           Start Scanning
         </button>
       )}
+      {processing ? <p className="mt-3 text-sm text-zinc-300">Processing barcode...</p> : null}
       {error ? <p className="mt-3 text-sm text-red-200">{error}</p> : null}
     </div>
   );

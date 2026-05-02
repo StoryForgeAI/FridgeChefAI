@@ -63,36 +63,35 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      <section className="panel overflow-hidden p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-yellow-300/75">Dashboard</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">FridgeChef Command Center</h1>
-            <p className="mt-3 max-w-sm text-sm leading-6 text-zinc-400">
-              Premium recipe intelligence powered by your pantry, your credits, and your subscription tier.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-3">
-            <ChefHat className="h-5 w-5 text-yellow-300" />
+      <section className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.28em] text-yellow-300/75">Dashboard</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold text-white sm:text-4xl">FridgeChef Command Center</h1>
+            <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-3">
+              <ChefHat className="h-5 w-5 text-yellow-300" />
+            </div>
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Credits</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{profile?.credits ?? 0}</p>
+        <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-right">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Credits</p>
+            <p className="mt-1 text-xl font-semibold text-white">{profile?.credits ?? 0}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">TSS</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{profile?.tss_credits ?? 0}</p>
+          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-right">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">TSS</p>
+            <p className="mt-1 text-xl font-semibold text-white">{profile?.tss_credits ?? 0}</p>
           </div>
         </div>
+      </section>
 
-        <div className="mt-4 flex items-center justify-between rounded-2xl border border-yellow-400/20 bg-yellow-400/10 px-4 py-3">
+      <section className="panel overflow-hidden p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-yellow-100">{tierConfig.label} tier</p>
             <p className="text-xs text-yellow-100/70">
-              {tierConfig.itemLimit} pantry items, {tierConfig.recipeSuggestions} recipe suggestions
+              {tierConfig.itemLimit} pantry items / {tierConfig.recipeSuggestions} recipe suggestions
             </p>
           </div>
           <Link href="/profile" className="text-sm font-medium text-yellow-200 hover:text-yellow-100">
@@ -101,7 +100,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-2">
         <div className="panel p-5">
           <div className="flex items-center gap-2 text-sm text-zinc-300">
             <PackageOpen className="h-4 w-4 text-yellow-300" />
@@ -136,7 +135,7 @@ export default function HomePage() {
                 <div key={history.id} className="rounded-2xl bg-black/30 px-4 py-3">
                   <p className="text-sm text-zinc-100">{history.ingredients.slice(0, 3).join(', ')}</p>
                   <p className="mt-1 text-xs text-zinc-500">
-                    {new Date(history.created_at).toLocaleDateString()} • {history.recipe.length} ideas saved
+                    {new Date(history.created_at).toLocaleDateString()} / {history.recipe.length} ideas saved
                   </p>
                 </div>
               ))

@@ -9,6 +9,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     loadProfile();
@@ -32,18 +33,15 @@ export default function ProfilePage() {
   async function handleConvertCredits() {
     const supabase = createBrowserClient();
     setLoading(true);
-    const {
-      data: { session }
-    } = await supabase.auth.getSession();
+    setActionError('');
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/convert-credits`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session?.access_token ?? ''}`
-      }
+    const { error } = await supabase.functions.invoke('convert-credits', {
+      body: {}
     });
 
-    if (response.ok) {
+    if (error) {
+      setActionError(error.message || 'Credit conversion failed.');
+    } else {
       await loadProfile();
     }
 
@@ -88,15 +86,14 @@ export default function ProfilePage() {
   const tier = resolveProfileTier(profile);
 
   return (
-    <div className="space-y-6">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
       <section className="panel p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.26em] text-yellow-300/75">Profile</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">{email || 'FridgeChef User'}</h1>
-            <p className="mt-3 text-sm leading-6 text-zinc-400">
-              Manage credits, TSS swaps, and premium subscription upgrades from one place.
-            </p>
+            <h1 className="mt-2 break-all text-xl font-semibold text-white sm:text-3xl">
+              {email || 'FridgeChef User'}
+            </h1>
           </div>
           <button
             onClick={handleSignOut}
@@ -107,25 +104,19 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-black/30 p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Credits</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{profile.credits}</p>
-          </div>
-          <div className="rounded-2xl bg-black/30 p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">TSS Credits</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{profile.tss_credits}</p>
-          </div>
-        </div>
-
         <button
           onClick={handleConvertCredits}
           disabled={loading || profile.credits < 20}
-          className="secondary-button mt-5 w-full gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="secondary-button mt-6 w-full gap-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowRightLeft className="h-4 w-4" />
           Convert 20 Credits into 1 TSS
         </button>
+
+        {profile.credits < 20 ? (
+          <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
+        ) : null}
+        {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
       </section>
 
       <section className="space-y-4">
@@ -151,7 +142,7 @@ export default function ProfilePage() {
                     <span className="text-lg font-semibold text-white">{config.label}</span>
                   </div>
                   <p className="mt-2 text-sm text-zinc-400">
-                    {config.credits} credits • {config.tss_credits} TSS • {config.itemLimit} items
+                    {config.credits} credits / {config.tss_credits} TSS / {config.itemLimit} items
                   </p>
                 </div>
                 <div className="text-right">
@@ -160,7 +151,7 @@ export default function ProfilePage() {
                 </div>
               </div>
               <div className="mt-4 flex items-center justify-between rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-300">
-                <span>{Math.round(config.discount * 100)}% discount • {config.recipeSuggestions} suggestions</span>
+                <span>{Math.round(config.discount * 100)}% discount / {config.recipeSuggestions} suggestions</span>
                 <span className={isActive ? 'text-yellow-200' : 'text-zinc-500'}>{isActive ? 'Current plan' : 'Upgrade'}</span>
               </div>
             </button>

@@ -18,7 +18,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className={
           isMarketingRoute
             ? 'relative mx-auto min-h-screen max-w-6xl px-4 pb-12 sm:px-6 lg:px-8'
-            : `relative mx-auto min-h-screen max-w-md px-4 ${isAppRoute ? 'pb-28 pt-4' : 'pb-10 pt-4'}`
+            : `relative mx-auto min-h-screen w-full max-w-7xl px-4 sm:px-6 lg:px-8 ${isAppRoute ? 'pb-28 pt-4 sm:pt-6' : 'pb-10 pt-4'}`
         }
       >
         {children}
