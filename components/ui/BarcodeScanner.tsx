@@ -1,17 +1,19 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ScanLine, X } from 'lucide-react';
+import { ScanLine, X, Timer } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase';
 import type { BarcodePreview, PantryItem } from '@/lib/types';
 
 export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) => void }) {
   const [scanning, setScanning] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<BarcodePreview | null>(null);
   const scannerRef = useRef<any>(null);
   const scanLockRef = useRef(false);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!scanning) {
@@ -71,8 +73,23 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
 
     setError('');
     setProcessing(true);
+    setCountdown(3);
+
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
     try {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
       const supabase = createBrowserClient();
       const { data, error: invokeError } = await supabase.functions.invoke('process-barcode', {
         body: {
@@ -92,6 +109,10 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
       scanLockRef.current = false;
     } finally {
       setProcessing(false);
+      setCountdown(0);
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
     }
   }
 
@@ -131,11 +152,15 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
     setPreview(null);
     setProcessing(false);
     setError('');
+    setCountdown(0);
     scanLockRef.current = false;
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
   }
 
   return (
-    <div>
+    <div className={preview ? 'pointer-events-none' : ''}>
       {scanning ? (
         <div className="relative overflow-hidden rounded-[1.75rem] border border-yellow-400/20 bg-black/50">
           <div className="scanner-grid absolute inset-0 z-10" />
@@ -167,12 +192,17 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
         </button>
       )}
 
-      {processing && !preview ? <p className="mt-3 text-sm text-zinc-300">Processing barcode...</p> : null}
-      {error ? <p className="mt-3 text-sm text-red-200">{error}</p> : null}
+       {processing && !preview ? (
+         <div className="mt-3 flex items-center gap-2 text-sm text-zinc-300">
+           <Timer className="h-4 w-4 animate-spin" />
+           {countdown > 0 ? `Processing in ${countdown}...` : 'Processing barcode...'}
+         </div>
+       ) : null}
+       {error ? <p className="mt-3 text-sm text-red-200">{error}</p> : null}
 
-      {preview ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
-          <div className="panel w-full max-w-md overflow-hidden p-0">
+       {preview ? (
+         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm pointer-events-auto">
+           <div className="panel w-full max-w-md overflow-hidden p-0 pointer-events-auto">
             <div className="relative aspect-square w-full overflow-hidden bg-zinc-950">
               {preview.image_url ? (
                 <img src={preview.image_url} alt={preview.name} className="h-full w-full object-cover" />
