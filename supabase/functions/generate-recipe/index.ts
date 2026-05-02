@@ -33,12 +33,12 @@ serve(async (req) => {
   // Generate recipes via OpenAI
   const allergyStr = allergies?.length ? `Avoid these allergens: ${allergies.join(', ')}.` : '';
   const calorieStr = max_calories ? `Max calories per serving: ${max_calories}.` : '';
-  const prompt = `Return valid JSON {recipes: [array of 5 recipe objects]} where each recipe has:
-- title: string (recipe name)
-- description: string (short 1-2 sentence description)
-- ingredients: string[] (required ingredients with quantities)
-- steps: string[] (numbered preparation steps)
-- kcal_per_serving: number (calories per serving)
+  const prompt = `Return valid JSON {"recipes": [array of 5 recipe objects]} where each recipe has:
+- "title": string (recipe name)
+- "description": string (short 1-2 sentence description)
+- "ingredients": string[] (required ingredients with quantities)
+- "steps": string[] (numbered preparation steps)
+- "kcal_per_serving": number (calories per serving)
 
 Use these ingredients: ${ingredients.join(', ')}. ${servings} servings. ${calorieStr} ${allergyStr}`;
 

@@ -37,14 +37,15 @@ serve(async (req) => {
         model: 'gpt-4o',
         messages: [{
           role: 'user',
-          content: `Return valid JSON {name: string, kcal: number} for grocery barcode ${barcode}. If unknown, return {name: "Unknown Product", kcal: 0}`
+          content: `Return valid JSON {"name": string, "kcal": number} for grocery barcode ${barcode}. If unknown, return {"name": "Unknown Product", "kcal": 0}`
         }],
         response_format: { type: 'json_object' }
       });
       const aiData = JSON.parse(aiRes.choices[0].message.content!);
       name = aiData.name;
       kcal = aiData.kcal;
-    } catch {
+    } catch (e) {
+      console.error('OpenAI fallback error:', e);
       name = 'Unknown Product';
       kcal = 0;
     }
