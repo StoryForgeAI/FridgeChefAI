@@ -4,16 +4,19 @@ import { useEffect, useState } from 'react';
 import { ScanLine, Trash2 } from 'lucide-react';
 import BarcodeScanner from '@/components/ui/BarcodeScanner';
 import { createBrowserClient } from '@/lib/supabase';
-import type { PantryItem } from '@/lib/types';
+import { resolveProfileTier, STRIPE_TIERS, type PantryItem, type Profile } from '@/lib/types';
 
 export default function ScannerPage() {
   const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
-    loadPantry();
+    loadPantryAndProfile();
   }, []);
 
-  async function loadPantry() {
+  async function loadPantryAndProfile() {
     const supabase = createBrowserClient();
     const {
       data: { user }
@@ -23,20 +26,44 @@ export default function ScannerPage() {
       return;
     }
 
-    const { data } = await supabase
-      .from('pantry_items')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    const [pantryResult, profileResult] = await Promise.all([
+      supabase
+        .from('pantry_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+    ]);
 
-    setPantry(data || []);
+    setPantry(pantryResult.data || []);
+    setProfile(profileResult.data as Profile | null);
+
+    if (profileResult.data) {
+      const tier = resolveProfileTier(profileResult.data);
+      const tierConfig = STRIPE_TIERS[tier];
+      setLimitReached((pantryResult.data?.length || 0) >= tierConfig.itemLimit);
+    }
   }
 
   async function removeItem(id: string) {
     const supabase = createBrowserClient();
     await supabase.from('pantry_items').delete().eq('id', id);
-    setPantry((current) => current.filter((item) => item.id !== id));
+    setPantry((current) => {
+      const newPantry = current.filter((item) => item.id !== id);
+      if (profile) {
+        const tier = resolveProfileTier(profile);
+        const tierConfig = STRIPE_TIERS[tier];
+        setLimitReached(newPantry.length >= tierConfig.itemLimit);
+      }
+      return newPantry;
+    });
   }
+
+  const itemLimit = profile ? STRIPE_TIERS[resolveProfileTier(profile)].itemLimit : 5;
 
   return (
     <div className="space-y-6">
@@ -54,38 +81,55 @@ export default function ScannerPage() {
           </div>
         </div>
 
+        {limitReached ? (
+          <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            You've reached your plan limit of {itemLimit} pantry items. Remove items or upgrade your plan to add more.
+          </div>
+        ) : null}
+
         <div className="mt-6">
           <BarcodeScanner
             onAdd={(item) => {
-              setPantry((current) => [item, ...current]);
+              setPantry((current) => {
+                const newPantry = [item, ...current];
+                if (profile) {
+                  const tier = resolveProfileTier(profile);
+                  const tierConfig = STRIPE_TIERS[tier];
+                  setLimitReached(newPantry.length >= tierConfig.itemLimit);
+                }
+                return newPantry;
+              });
             }}
+            onPreviewStateChange={setShowPreview}
           />
         </div>
       </section>
 
-      <section className="panel p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="section-title">Pantry Items</h2>
-          <span className="text-sm text-zinc-500">{pantry.length} items</span>
-        </div>
-        <div className="space-y-3">
-          {pantry.map((item) => (
-            <div key={item.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-              <div>
-                <p className="font-medium text-zinc-100">{item.name}</p>
-                <p className="text-xs text-zinc-500">{item.barcode}</p>
+      {!showPreview ? (
+        <section className="panel p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="section-title">Pantry Items</h2>
+            <span className="text-sm text-zinc-500">{pantry.length}/{itemLimit} items</span>
+          </div>
+          <div className="space-y-3">
+            {pantry.map((item) => (
+              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+                <div>
+                  <p className="font-medium text-zinc-100">{item.name}</p>
+                  <p className="text-xs text-zinc-500">{item.barcode}</p>
+                </div>
+                <button
+                  onClick={() => removeItem(item.id)}
+                  className="inline-flex items-center gap-2 rounded-full border border-red-400/20 px-3 py-2 text-xs text-red-200 transition hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove
+                </button>
               </div>
-              <button
-                onClick={() => removeItem(item.id)}
-                className="inline-flex items-center gap-2 rounded-full border border-red-400/20 px-3 py-2 text-xs text-red-200 transition hover:bg-red-500/10"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

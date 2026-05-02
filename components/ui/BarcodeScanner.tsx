@@ -5,7 +5,10 @@ import { ScanLine, X, Timer } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase';
 import type { BarcodePreview, PantryItem } from '@/lib/types';
 
-export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) => void }) {
+export default function BarcodeScanner({ onAdd, onPreviewStateChange }: { 
+  onAdd: (item: PantryItem) => void;
+  onPreviewStateChange?: (isShowing: boolean) => void;
+}) {
   const [scanning, setScanning] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -104,6 +107,7 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
 
       setPreview(data as BarcodePreview);
       setScanning(false);
+      onPreviewStateChange?.(true);
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : 'Failed to process barcode. Please try again.');
       scanLockRef.current = false;
@@ -157,6 +161,7 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
     if (countdownRef.current) {
       clearInterval(countdownRef.current);
     }
+    onPreviewStateChange?.(false);
   }
 
   return (
