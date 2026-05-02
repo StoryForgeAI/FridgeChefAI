@@ -7,6 +7,7 @@ import type { Profile, PantryItem } from '@/lib/types';
 export default function HomePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const supabase = createBrowserClient();
 
   useEffect(() => {
@@ -14,15 +15,22 @@ export default function HomePage() {
   }, []);
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-    setProfile(profileData);
-    const { data: pantryData } = await supabase.from('pantry_items').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    setPantry(pantryData || []);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
+      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      setProfile(profileData);
+      const { data: pantryData } = await supabase.from('pantry_items').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      setPantry(pantryData || []);
+    } catch (e) {
+      console.error('Load error:', e);
+    }
+    setLoading(false);
   };
 
-  const tierConfig = profile ? STRIPE_TIERS[profile.tier] : null;
+  if (loading) return <div className="p-4">Loading...</div>;
+
+  const tierConfig = profile ? STRIPE_TIERS[profile.tier as keyof typeof STRIPE_TIERS] : null;
 
   return (
     <div className="p-4">
@@ -54,6 +62,9 @@ export default function HomePage() {
             {pantry.length > 5 && <p className="text-xs text-gray-500">+{pantry.length - 5} more</p>}
           </div>
         )}
+      </div>
+      <div className="mt-4">
+        <a href="/scanner" className="block w-full bg-blue-600 text-white text-center py-3 rounded-lg">Scan Items</a>
       </div>
     </div>
   );
