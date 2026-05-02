@@ -9,9 +9,13 @@ const navItems = [
   { href: '/profile', label: 'Profile', icon: '👤' }
 ];
 
+const validPaths = navItems.map(item => item.href);
+
 export default function BottomNav() {
   const pathname = usePathname();
-
+  
+  if (!validPaths.includes(pathname)) return null;
+  
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 max-w-md mx-auto">
       <div className="flex justify-around py-2">
