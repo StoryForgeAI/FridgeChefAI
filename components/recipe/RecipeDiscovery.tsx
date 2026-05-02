@@ -67,6 +67,7 @@ export default function RecipeDiscovery({
       setHistoryId(payload.historyId);
       setRecipes(payload.recipes.slice(0, recipeLimit));
       setExpandedCard(0);
+      window.dispatchEvent(new Event('fridgechef:profile-refresh'));
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : 'Recipe generation failed.');
     } finally {

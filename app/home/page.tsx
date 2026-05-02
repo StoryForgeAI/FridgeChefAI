@@ -73,17 +73,6 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 xl:justify-end">
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-right">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Credits</p>
-            <p className="mt-1 text-xl font-semibold text-white">{profile?.credits ?? 0}</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-right">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">TSS</p>
-            <p className="mt-1 text-xl font-semibold text-white">{profile?.tss_credits ?? 0}</p>
-          </div>
-        </div>
       </section>
 
       <section className="panel overflow-hidden p-4 sm:p-5">

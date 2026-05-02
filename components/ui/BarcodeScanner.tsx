@@ -75,6 +75,7 @@ export default function BarcodeScanner({ onAdd }: { onAdd: (item: PantryItem) =>
       }
 
       onAdd(data as PantryItem);
+      window.dispatchEvent(new Event('fridgechef:profile-refresh'));
       setScanning(false);
       await stopScanner();
     } catch (scanError) {

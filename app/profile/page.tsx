@@ -43,6 +43,7 @@ export default function ProfilePage() {
       setActionError(error.message || 'Credit conversion failed.');
     } else {
       await loadProfile();
+      window.dispatchEvent(new Event('fridgechef:profile-refresh'));
     }
 
     setLoading(false);
