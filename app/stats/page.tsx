@@ -106,6 +106,13 @@ export default function StatsPage() {
     .slice(0, 6);
 
   const tierConfig = STRIPE_TIERS[resolveProfileTier(data.profile)];
+  const accessLevel = data.profile?.stats_access_level ?? 'basic';
+
+  // Helper to check if user can access a feature
+  const canAccess = (requiredLevel: 'basic' | 'pro' | 'ultra') => {
+    const levels = { basic: 1, pro: 2, ultra: 3 };
+    return (levels[accessLevel as keyof typeof levels] || 0) >= (levels[requiredLevel] || 0);
+  };
 
   const weeklyData = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(now);
@@ -212,117 +219,163 @@ export default function StatsPage() {
         </article>
       </section>
 
+      {/* Basic stats - available for all */}
       <section className="panel p-5">
         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
           <Salad className="h-4 w-4 text-yellow-300" />
           Most Used Ingredients
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {ingredientUsage.map(([ingredient, count]) => (
-            <div key={ingredient} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-              <span className="text-zinc-100">{ingredient}</span>
-              <span className="rounded-full bg-yellow-400/10 px-3 py-1 text-xs text-yellow-100">{count} uses</span>
-            </div>
-          ))}
-        </div>
+        {canAccess('basic') ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {ingredientUsage.map(([ingredient, count]) => (
+              <div key={ingredient} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+                <span className="text-zinc-100">{ingredient}</span>
+                <span className="rounded-full bg-yellow-400/10 px-3 py-1 text-xs text-yellow-100">{count} uses</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-black/30 p-6 text-center">
+            <p className="text-sm text-zinc-500">Upgrade to <span className="text-yellow-300 font-semibold">Standard</span> to see ingredient usage</p>
+          </div>
+        )}
       </section>
+      
+      {/* Weekly Calorie Distribution - requires basic */}
+      {canAccess('basic') ? (
+        <section className="panel p-5">
+          <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+            <Flame className="h-4 w-4 text-yellow-300" />
+            Weekly Calorie Distribution
+          </div>
+          <div className="flex h-32 items-end gap-2">
+            {weeklyData.map((dayData, index) => (
+              <div key={index} className="flex-1 flex flex-col items-center gap-1">
+                <div 
+                  className="w-full rounded-t-lg bg-yellow-400/80 transition-all duration-500"
+                  style={{ 
+                    height: `${(dayData.calories / maxCalories) * 100}%`,
+                    minHeight: '4px'
+                  }}
+                />
+                <span className="text-xs text-zinc-500">{dayData.day}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="panel p-5 opacity-40">
+          <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+            <Flame className="h-4 w-4 text-yellow-300" />
+            Weekly Calorie Distribution
+          </div>
+          <div className="rounded-2xl bg-black/30 p-6 text-center">
+            <p className="text-sm text-zinc-500">Upgrade to <span className="text-yellow-300 font-semibold">Standard</span> to see calorie distribution</p>
+          </div>
+        </section>
+      )}
 
-       <section className="panel p-5">
-         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
-           <Flame className="h-4 w-4 text-yellow-300" />
-           Weekly Calorie Distribution
-         </div>
-         <div className="flex h-32 items-end gap-2">
-           {weeklyData.map((dayData, index) => (
-             <div key={index} className="flex-1 flex flex-col items-center gap-1">
-               <div 
-                 className="w-full rounded-t-lg bg-yellow-400/80 transition-all duration-500"
-                 style={{ 
-                   height: `${(dayData.calories / maxCalories) * 100}%`,
-                   minHeight: '4px'
-                 }}
-               />
-               <span className="text-xs text-zinc-500">{dayData.day}</span>
-             </div>
-           ))}
-         </div>
-       </section>
+      {/* Recipe Generation Trend - requires pro */}
+      {canAccess('pro') ? (
+        <section className="panel p-5">
+          <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+            <Sparkles className="h-4 w-4 text-yellow-300" />
+            Recipe Generation Trend
+          </div>
+          <div className="relative h-32">
+            <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <polyline
+                fill="none"
+                stroke="rgba(255, 215, 0, 0.8)"
+                strokeWidth="2"
+                points={recipeTrend.map((d, i) => `${(i / 6) * 100} ${100 - (d.count / maxRecipeCount) * 80}`).join(' ')}
+              />
+              {recipeTrend.map((d, i) => (
+                <circle
+                  key={i}
+                  cx={`${(i / 6) * 100}`}
+                  cy={`${100 - (d.count / maxRecipeCount) * 80}`}
+                  r="2"
+                  fill="rgba(255, 215, 0, 0.8)"
+                />
+              ))}
+            </svg>
+            <div className="mt-2 flex justify-between text-xs text-zinc-500">
+              {recipeTrend.map((d) => (
+                <span key={d.day}>{d.day}</span>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="panel p-5 opacity-40">
+          <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+            <Sparkles className="h-4 w-4 text-yellow-300" />
+            Recipe Generation Trend
+          </div>
+          <div className="rounded-2xl bg-black/30 p-6 text-center">
+            <p className="text-sm text-zinc-500">Upgrade to <span className="text-yellow-300 font-semibold">Pro</span> to see recipe trends</p>
+          </div>
+        </section>
+      )}
 
-       <section className="panel p-5">
-         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
-           <Sparkles className="h-4 w-4 text-yellow-300" />
-           Recipe Generation Trend
-         </div>
-         <div className="relative h-32">
-           <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-             <polyline
-               fill="none"
-               stroke="rgba(255, 215, 0, 0.8)"
-               strokeWidth="2"
-               points={recipeTrend.map((d, i) => `${(i / 6) * 100} ${100 - (d.count / maxRecipeCount) * 80}`).join(' ')}
-             />
-             {recipeTrend.map((d, i) => (
-               <circle
-                 key={i}
-                 cx={`${(i / 6) * 100}`}
-                 cy={`${100 - (d.count / maxRecipeCount) * 80}`}
-                 r="2"
-                 fill="rgba(255, 215, 0, 0.8)"
-               />
-             ))}
-           </svg>
-           <div className="mt-2 flex justify-between text-xs text-zinc-500">
-             {recipeTrend.map((d) => (
-               <span key={d.day}>{d.day}</span>
-             ))}
-           </div>
-         </div>
-       </section>
-
-       <section className="panel p-5">
-         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
-           <Salad className="h-4 w-4 text-yellow-300" />
-           Ingredient Usage Distribution
-         </div>
-         <div className="flex items-center gap-6">
-           <div className="relative h-32 w-32">
-             <svg className="h-full w-full" viewBox="0 0 100 100">
-               {donutData.map((d, i) => {
-                 const startAngle = donutData.slice(0, i).reduce((sum, item) => sum + (item.percentage / 100) * 360, 0);
-                 const endAngle = startAngle + (d.percentage / 100) * 360;
-                 const startRad = (startAngle - 90) * (Math.PI / 180);
-                 const endRad = (endAngle - 90) * (Math.PI / 180);
-                 const x1 = 50 + 40 * Math.cos(startRad);
-                 const y1 = 50 + 40 * Math.sin(startRad);
-                 const x2 = 50 + 40 * Math.cos(endRad);
-                 const y2 = 50 + 40 * Math.sin(endRad);
-                 const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-                 
-                 return (
-                   <path
-                     key={d.ingredient}
-                     d={`M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`}
-                     fill="rgba(255, 215, 0, 0.8)"
-                     opacity={0.6 + (i / donutData.length) * 0.4}
-                   />
-                 );
-               })}
-               <circle cx="50" cy="50" r="25" fill="#0a0a0a" />
-               <text x="50" y="50" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-300 text-xs">
-                 {donutData.length}
-               </text>
-             </svg>
-           </div>
-           <div className="flex-1 space-y-2">
-             {donutData.map((d) => (
-               <div key={d.ingredient} className="flex items-center justify-between text-sm">
-                 <span className="text-zinc-300 truncate">{d.ingredient}</span>
-                 <span className="ml-2 text-xs text-zinc-500">{d.percentage.toFixed(1)}%</span>
-               </div>
-             ))}
-           </div>
-         </div>
-       </section>
-     </div>
-   );
+      {/* Ingredient Usage Distribution - requires ultra (chef) */}
+      {canAccess('ultra') ? (
+        <section className="panel p-5">
+          <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+            <Salad className="h-4 w-4 text-yellow-300" />
+            Ingredient Usage Distribution
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="relative h-32 w-32">
+              <svg className="h-full w-full" viewBox="0 0 100 100">
+                {donutData.map((d, i) => {
+                  const startAngle = donutData.slice(0, i).reduce((sum, item) => sum + (item.percentage / 100) * 360, 0);
+                  const endAngle = startAngle + (d.percentage / 100) * 360;
+                  const startRad = (startAngle - 90) * (Math.PI / 180);
+                  const endRad = (endAngle - 90) * (Math.PI / 180);
+                  const x1 = 50 + 40 * Math.cos(startRad);
+                  const y1 = 50 + 40 * Math.sin(startRad);
+                  const x2 = 50 + 40 * Math.cos(endRad);
+                  const y2 = 50 + 40 * Math.sin(endRad);
+                  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+                  
+                  return (
+                    <path
+                      key={d.ingredient}
+                      d={`M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`}
+                      fill="rgba(255, 215, 0, 0.8)"
+                      opacity={0.6 + (i / donutData.length) * 0.4}
+                    />
+                  );
+                })}
+                <circle cx="50" cy="50" r="25" fill="#0a0a0a" />
+                <text x="50" y="50" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-300 text-xs">
+                  {donutData.length}
+                </text>
+              </svg>
+            </div>
+            <div className="flex-1 space-y-2">
+              {donutData.map((d) => (
+                <div key={d.ingredient} className="flex items-center justify-between text-sm">
+                  <span className="text-zinc-300 truncate">{d.ingredient}</span>
+                  <span className="ml-2 text-xs text-zinc-500">{d.percentage.toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="panel p-5 opacity-40">
+          <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+            <Salad className="h-4 w-4 text-yellow-300" />
+            Ingredient Usage Distribution
+          </div>
+          <div className="rounded-2xl bg-black/30 p-6 text-center">
+            <p className="text-sm text-zinc-500">Upgrade to <span className="text-yellow-300 font-semibold">Chef</span> to see ingredient distribution charts</p>
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
