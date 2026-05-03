@@ -5,8 +5,7 @@ import { ScanLine, X, Timer } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase';
 import type { BarcodePreview, PantryItem } from '@/lib/types';
 
-export default function BarcodeScanner({ onAdd, onPreviewStateChange }: { 
-  onAdd: (item: PantryItem) => void;
+export default function BarcodeScanner({ onPreviewStateChange }: { 
   onPreviewStateChange?: (isShowing: boolean) => void;
 }) {
   const [scanning, setScanning] = useState(false);
@@ -59,7 +58,31 @@ export default function BarcodeScanner({ onAdd, onPreviewStateChange }: {
           await new Promise((resolve) => setTimeout(resolve, 3000));
 
           await stopScanner();
-          await handleScan(decodedText);
+          // Csak betöltjük az előnézetet, nem mentjük
+          const supabase = createBrowserClient();
+          try {
+            const { data, error: invokeError } = await supabase.functions.invoke('process-barcode', {
+              body: {
+                barcode: decodedText,
+                mode: 'preview'
+              }
+            });
+            if (invokeError) {
+              throw new Error(invokeError.message || 'Failed to process barcode.');
+            }
+            setPreview(data as BarcodePreview);
+            setScanning(false);
+            onPreviewStateChange?.(true);
+          } catch (scanError) {
+            setError(scanError instanceof Error ? scanError.message : 'Failed to process barcode. Please try again.');
+            scanLockRef.current = false;
+          } finally {
+            setProcessing(false);
+            setCountdown(0);
+            if (countdownRef.current) {
+              clearInterval(countdownRef.current);
+            }
+          }
         },
         () => {}
       );
@@ -86,41 +109,6 @@ export default function BarcodeScanner({ onAdd, onPreviewStateChange }: {
     }
   }
 
-  async function handleScan(barcode: string) {
-    if (!barcode || processing) {
-      return;
-    }
-
-    setError('');
-
-    try {
-      const supabase = createBrowserClient();
-      const { data, error: invokeError } = await supabase.functions.invoke('process-barcode', {
-        body: {
-          barcode,
-          mode: 'preview'
-        }
-      });
-
-      if (invokeError) {
-        throw new Error(invokeError.message || 'Failed to process barcode.');
-      }
-
-      setPreview(data as BarcodePreview);
-      setScanning(false);
-      onPreviewStateChange?.(true);
-    } catch (scanError) {
-      setError(scanError instanceof Error ? scanError.message : 'Failed to process barcode. Please try again.');
-      scanLockRef.current = false;
-    } finally {
-      setProcessing(false);
-      setCountdown(0);
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
-      }
-    }
-  }
-
   async function confirmAdd() {
     if (!preview) {
       return;
@@ -142,7 +130,6 @@ export default function BarcodeScanner({ onAdd, onPreviewStateChange }: {
         throw new Error(invokeError.message || 'Failed to add pantry item.');
       }
 
-      window.dispatchEvent(new Event('fridgechef:profile-refresh'));
       setPreview(null);
       scanLockRef.current = false;
     } catch (addError) {

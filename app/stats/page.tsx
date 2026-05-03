@@ -129,6 +129,35 @@ export default function StatsPage() {
 
   const maxCalories = Math.max(...weeklyData.map(d => d.calories), 1);
 
+  // Recipe generation trend (last 7 days)
+  const recipeTrend = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(now);
+    date.setDate(date.getDate() - (6 - i));
+    date.setHours(0, 0, 0, 0);
+    const nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    const count = data.history.filter(h => {
+      const hDate = new Date(h.created_at);
+      return hDate >= date && hDate < nextDate;
+    }).length;
+
+    return {
+      day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      count
+    };
+  });
+
+  const maxRecipeCount = Math.max(...recipeTrend.map(d => d.count), 1);
+
+  // Donut chart data for ingredient usage
+  const totalUsage = ingredientUsage.reduce((sum, [, count]) => sum + count, 0);
+  const donutData = ingredientUsage.map(([ingredient, count]) => ({
+    ingredient,
+    count,
+    percentage: totalUsage > 0 ? (count / totalUsage) * 100 : 0
+  }));
+
   return (
     <div className="space-y-6">
       <section className="panel p-6">
@@ -198,26 +227,102 @@ export default function StatsPage() {
         </div>
       </section>
 
-      <section className="panel p-5">
-        <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
-          <Flame className="h-4 w-4 text-yellow-300" />
-          Weekly Calorie Distribution
-        </div>
-        <div className="flex h-32 items-end gap-2">
-          {weeklyData.map((dayData, index) => (
-            <div key={index} className="flex-1 flex flex-col items-center gap-1">
-              <div 
-                className="w-full rounded-t-lg bg-yellow-400/80 transition-all duration-500"
-                style={{ 
-                  height: `${(dayData.calories / maxCalories) * 100}%`,
-                  minHeight: '4px'
-                }}
-              />
-              <span className="text-xs text-zinc-500">{dayData.day}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
+       <section className="panel p-5">
+         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+           <Flame className="h-4 w-4 text-yellow-300" />
+           Weekly Calorie Distribution
+         </div>
+         <div className="flex h-32 items-end gap-2">
+           {weeklyData.map((dayData, index) => (
+             <div key={index} className="flex-1 flex flex-col items-center gap-1">
+               <div 
+                 className="w-full rounded-t-lg bg-yellow-400/80 transition-all duration-500"
+                 style={{ 
+                   height: `${(dayData.calories / maxCalories) * 100}%`,
+                   minHeight: '4px'
+                 }}
+               />
+               <span className="text-xs text-zinc-500">{dayData.day}</span>
+             </div>
+           ))}
+         </div>
+       </section>
+
+       <section className="panel p-5">
+         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+           <Sparkles className="h-4 w-4 text-yellow-300" />
+           Recipe Generation Trend
+         </div>
+         <div className="relative h-32">
+           <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+             <polyline
+               fill="none"
+               stroke="rgba(255, 215, 0, 0.8)"
+               strokeWidth="2"
+               points={recipeTrend.map((d, i) => `${(i / 6) * 100} ${100 - (d.count / maxRecipeCount) * 80}`).join(' ')}
+             />
+             {recipeTrend.map((d, i) => (
+               <circle
+                 key={i}
+                 cx={`${(i / 6) * 100}`}
+                 cy={`${100 - (d.count / maxRecipeCount) * 80}`}
+                 r="2"
+                 fill="rgba(255, 215, 0, 0.8)"
+               />
+             ))}
+           </svg>
+           <div className="mt-2 flex justify-between text-xs text-zinc-500">
+             {recipeTrend.map((d) => (
+               <span key={d.day}>{d.day}</span>
+             ))}
+           </div>
+         </div>
+       </section>
+
+       <section className="panel p-5">
+         <div className="mb-4 flex items-center gap-2 text-sm text-zinc-300">
+           <Salad className="h-4 w-4 text-yellow-300" />
+           Ingredient Usage Distribution
+         </div>
+         <div className="flex items-center gap-6">
+           <div className="relative h-32 w-32">
+             <svg className="h-full w-full" viewBox="0 0 100 100">
+               {donutData.map((d, i) => {
+                 const startAngle = donutData.slice(0, i).reduce((sum, item) => sum + (item.percentage / 100) * 360, 0);
+                 const endAngle = startAngle + (d.percentage / 100) * 360;
+                 const startRad = (startAngle - 90) * (Math.PI / 180);
+                 const endRad = (endAngle - 90) * (Math.PI / 180);
+                 const x1 = 50 + 40 * Math.cos(startRad);
+                 const y1 = 50 + 40 * Math.sin(startRad);
+                 const x2 = 50 + 40 * Math.cos(endRad);
+                 const y2 = 50 + 40 * Math.sin(endRad);
+                 const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+                 
+                 return (
+                   <path
+                     key={d.ingredient}
+                     d={`M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`}
+                     fill="rgba(255, 215, 0, 0.8)"
+                     opacity={0.6 + (i / donutData.length) * 0.4}
+                   />
+                 );
+               })}
+               <circle cx="50" cy="50" r="25" fill="#0a0a0a" />
+               <text x="50" y="50" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-300 text-xs">
+                 {donutData.length}
+               </text>
+             </svg>
+           </div>
+           <div className="flex-1 space-y-2">
+             {donutData.map((d) => (
+               <div key={d.ingredient} className="flex items-center justify-between text-sm">
+                 <span className="text-zinc-300 truncate">{d.ingredient}</span>
+                 <span className="ml-2 text-xs text-zinc-500">{d.percentage.toFixed(1)}%</span>
+               </div>
+             ))}
+           </div>
+         </div>
+       </section>
+     </div>
+   );
 }

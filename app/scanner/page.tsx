@@ -89,17 +89,6 @@ export default function ScannerPage() {
 
         <div className="mt-6">
           <BarcodeScanner
-            onAdd={(item) => {
-              setPantry((current) => {
-                const newPantry = [item, ...current];
-                if (profile) {
-                  const tier = resolveProfileTier(profile);
-                  const tierConfig = STRIPE_TIERS[tier];
-                  setLimitReached(newPantry.length >= tierConfig.itemLimit);
-                }
-                return newPantry;
-              });
-            }}
             onPreviewStateChange={setShowPreview}
           />
         </div>
