@@ -72,7 +72,7 @@ export const STRIPE_TIERS = {
   free: {
     label: 'Free',
     price: 0,
-    credits: 0,
+    credits: 20,
     tss_credits: 0,
     discount: 0,
     itemLimit: 5,
