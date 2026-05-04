@@ -21,6 +21,11 @@ async function updateProfileSubscription(userId: string, subscription: any) {
 
   console.log('[Stripe Webhook] Updating profile:', { userId, tier, priceId, subscriptionId: subscription.id, status: subscription.status });
 
+  // Fetch current credits to ADD new ones
+  const { data: current } = await supabaseAdmin.from('profiles').select('credits, tss_credits').eq('id', userId).single();
+  const currentCredits = current?.credits ?? 0;
+  const currentTss = current?.tss_credits ?? 0;
+
   return supabaseAdmin
     .from('profiles')
     .update({
@@ -29,8 +34,8 @@ async function updateProfileSubscription(userId: string, subscription: any) {
       subscription_status: subscription.status,
       stripe_customer_id: subscription.customer,
       stripe_subscription_id: subscription.id,
-      credits: config.credits,
-      tss_credits: config.tss_credits,
+      credits: currentCredits + config.credits,
+      tss_credits: currentTss + config.tss_credits,
       discount_percent: config.discount,
       item_limit: config.itemLimit,
       recipe_suggestion_limit: config.recipeSuggestions,

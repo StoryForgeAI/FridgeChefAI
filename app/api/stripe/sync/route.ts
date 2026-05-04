@@ -114,7 +114,12 @@ export async function POST(req: NextRequest) {
 
     console.log('[Stripe Sync] Tier:', tier, 'Price ID:', priceId, 'Config:', config);
 
-    // 4. Update profile
+    // 4. Get current credits to ADD new ones
+    const { data: currentProfile } = await supabaseAdmin.from('profiles').select('credits, tss_credits').eq('id', userId).single();
+    const currentCredits = currentProfile?.credits ?? 20; // default free tier
+    const currentTss = currentProfile?.tss_credits ?? 0;
+
+    // 5. Update profile (ADD credits, don't overwrite)
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({
@@ -123,8 +128,8 @@ export async function POST(req: NextRequest) {
         subscription_status: subscription.status,
         stripe_customer_id: subscription.customer,
         stripe_subscription_id: subscription.id,
-        credits: config.credits,
-        tss_credits: config.tss_credits,
+        credits: currentCredits + config.credits,
+        tss_credits: currentTss + config.tss_credits,
         discount_percent: config.discount,
         item_limit: config.itemLimit,
         recipe_suggestion_limit: config.recipeSuggestions,

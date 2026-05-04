@@ -29,11 +29,16 @@ export async function POST(req: NextRequest) {
 
   const { data: profileData } = await supabaseAdmin.from('profiles').select('*').eq('id', user.id).single();
   const profile = profileData as Profile | null;
-  if (!profile || profile.credits < 10) {
-    return NextResponse.json({ error: 'Insufficient credits' }, { status: 403 });
-  }
+
+  const discount = profile?.discount_percent || 0;
+  const baseCost = 10;
+  const actualCost = Math.max(1, Math.round(baseCost * (1 - discount)));
 
   const tierConfig = STRIPE_TIERS[resolveProfileTier(profile)];
+  if (!profile || profile.credits < actualCost) {
+    return NextResponse.json({ error: `Insufficient credits (need ${actualCost}, have ${profile?.credits || 0})` }, { status: 403 });
+  }
+  
   const allergyStr = allergies?.length ? `Avoid: ${allergies.join(', ')}.` : '';
   const calorieStr = max_calories ? `Each recipe must remain at or below ${max_calories} kcal per serving.` : '';
   const prompt = `Return valid JSON in the shape {"recipes":[...]}. Generate ${Math.max(tierConfig.recipeSuggestions, 5)} recipe ideas using these ingredients: ${ingredients.join(', ')}. Each recipe object must include title, description, ingredients (string array with quantities), prep (string array), steps (string array), and kcal_per_serving (number). The meal plan should make ${servings} servings. ${calorieStr} ${allergyStr}`;
@@ -74,8 +79,14 @@ export async function POST(req: NextRequest) {
     }
 
     const newTssCredits = Math.max(0, (profile.tss_credits || 0) - 1);
+    
+    const discount = profile.discount_percent || 0;
+    const baseCost = 10;
+    const actualCost = Math.max(1, Math.round(baseCost * (1 - discount)));
+    const newCredits = Math.max(0, profile.credits - actualCost);
+
     await supabaseAdmin.from('profiles').update({ 
-      credits: profile.credits - 10,
+      credits: newCredits,
       tss_credits: newTssCredits
     }).eq('id', user.id);
 
@@ -90,7 +101,7 @@ export async function POST(req: NextRequest) {
         .from('stats')
         .update({
           total_recipes_generated: (stats.total_recipes_generated || 0) + 1,
-          total_credits_used: (stats.total_credits_used || 0) + 10
+          total_credits_used: (stats.total_credits_used || 0) + actualCost
         })
         .eq('user_id', user.id);
     }
