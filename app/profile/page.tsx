@@ -9,6 +9,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [actionError, setActionError] = useState<string>('');
 
   useEffect(() => {
     loadProfile();
@@ -32,7 +33,7 @@ export default function ProfilePage() {
   async function handleConvertCredits() {
     const supabase = createBrowserClient();
     setLoading(true);
-    // reset any potential error state (no explicit error state now)
+    setActionError('');
 
     const { data, error } = await supabase.functions.invoke('convert-credits', {
       body: {}
@@ -141,7 +142,7 @@ export default function ProfilePage() {
         {profile.credits < 20 ? (
           <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
         ) : null}
-        {false}
+        {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
       </section>
 
       <section className="space-y-4">
