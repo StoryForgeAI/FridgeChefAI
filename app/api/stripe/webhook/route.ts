@@ -112,9 +112,10 @@ export async function POST(req: NextRequest) {
         const config = STRIPE_TIERS[tier];
         if (userId) {
           const admin = getSupabaseAdmin();
-          const { data: current } = await admin.from('profiles').select('*').eq('id', userId).single();
-          const newCredits = (current?.credits ?? 0) + config.credits;
-          const newTss = (current?.tss_credits ?? 0) + config.tss_credits;
+          const { data: current } = await admin.from('profiles').select('*').eq('id', userId).single() as any;
+          const currentData = current as any;
+          const newCredits = (currentData?.credits ?? 0) + config.credits;
+          const newTss = (currentData?.tss_credits ?? 0) + config.tss_credits;
           await admin.from('profiles').update({
             credits: newCredits,
             tss_credits: newTss,
