@@ -11,6 +11,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState<string>('');
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [syncError, setSyncError] = useState<string>('');
+  const [syncResult, setSyncResult] = useState<any>(null);
 
   useEffect(() => {
     loadProfile();
@@ -23,7 +25,12 @@ export default function ProfilePage() {
 
     if (isSuccess && profile?.id) {
       setProcessingPayment(true);
+      setSyncError('');
+      let attempts = 0;
+      const maxAttempts = 20;
+
       const attemptSync = async () => {
+        attempts++;
         try {
           await new Promise(r => setTimeout(r, 1500));
           const res = await fetch('/api/stripe/sync', {
@@ -32,27 +39,53 @@ export default function ProfilePage() {
             body: JSON.stringify({ userId: profile.id, sessionId })
           });
           const result = await res.json();
+          console.log('[Profile] Sync result:', result);
+          
           if (result.synced) {
             await loadProfile();
             setProcessingPayment(false);
+            setSyncResult(result);
+            setSyncError('');
             window.history.replaceState({}, '', '/profile');
+          } else if (attempts >= maxAttempts) {
+            setProcessingPayment(false);
+            setSyncError(result.error || result.reason || 'Sync failed after multiple attempts');
           }
-        } catch {
-          // retry
+        } catch (err: any) {
+          if (attempts >= maxAttempts) {
+            setProcessingPayment(false);
+            setSyncError(err.message || 'Network error during sync');
+          }
         }
       };
       attemptSync();
       const interval = setInterval(attemptSync, 2000);
-      const timeout = setTimeout(() => {
-        clearInterval(interval);
-        setProcessingPayment(false);
-      }, 30000);
-      return () => {
-        clearInterval(interval);
-        clearTimeout(timeout);
-      };
+      return () => clearInterval(interval);
     }
   }, [profile?.id]);
+
+  async function handleRetrySync() {
+    if (!profile?.id) return;
+    setProcessingPayment(true);
+    setSyncError('');
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const sessionId = params?.get('session_id');
+    
+    const res = await fetch('/api/stripe/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: profile.id, sessionId: sessionId || undefined })
+    });
+    const result = await res.json();
+    if (result.synced) {
+      await loadProfile();
+      setProcessingPayment(false);
+      window.history.replaceState({}, '', '/profile');
+    } else {
+      setProcessingPayment(false);
+      setSyncError(result.error || result.reason || 'Sync failed');
+    }
+  }
 
   async function loadProfile() {
     const supabase = createBrowserClient();
@@ -190,6 +223,28 @@ export default function ProfilePage() {
           <div className="mt-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-center">
             <p className="text-sm text-yellow-200">Processing your subscription...</p>
             <p className="mt-1 text-xs text-zinc-400">Please wait while we confirm your payment.</p>
+          </div>
+        ) : null}
+
+        {syncError ? (
+          <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-4">
+            <p className="text-sm text-red-200">Could not confirm subscription</p>
+            <p className="mt-1 text-xs text-zinc-400 font-mono">{syncError}</p>
+            <button
+              onClick={handleRetrySync}
+              className="mt-3 rounded-full bg-red-400/20 px-4 py-2 text-sm text-red-200 transition hover:bg-red-400/30"
+            >
+              Retry Sync
+            </button>
+          </div>
+        ) : null}
+
+        {syncResult?.synced ? (
+          <div className="mt-4 rounded-2xl border border-green-400/30 bg-green-400/10 p-4">
+            <p className="text-sm text-green-200">Subscription confirmed!</p>
+            <p className="mt-1 text-xs text-zinc-400">
+              {syncResult.tier} tier • {syncResult.credits} credits • {syncResult.tss_credits} TSS
+            </p>
           </div>
         ) : null}
 
