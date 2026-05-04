@@ -10,9 +10,28 @@ export default function ProfilePage() {
   const [email, setEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState<string>('');
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   useEffect(() => {
     loadProfile();
+    const isSuccess = typeof window !== 'undefined' && window.location.search.includes('success=true');
+    if (isSuccess) {
+      setProcessingPayment(true);
+      const interval = setInterval(async () => {
+        const supabase = createBrowserClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+          setProfile(data);
+          if (data?.stripe_subscription_id) {
+            clearInterval(interval);
+            setProcessingPayment(false);
+            window.history.replaceState({}, '', '/profile');
+          }
+        }
+      }, 2000);
+      return () => clearInterval(interval);
+    }
   }, []);
 
   async function loadProfile() {
@@ -118,6 +137,7 @@ export default function ProfilePage() {
   }
 
   const tier = resolveProfileTier(profile);
+  const hasSubscription = Boolean(profile.stripe_subscription_id);
 
   // Client-side price configuration check (pricing IDs exposed as NEXT_PUBLIC_ vars)
   const priceIdsTop = {
@@ -146,6 +166,32 @@ export default function ProfilePage() {
           </button>
         </div>
 
+        {processingPayment ? (
+          <div className="mt-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-center">
+            <p className="text-sm text-yellow-200">Processing your subscription...</p>
+            <p className="mt-1 text-xs text-zinc-400">Please wait while we confirm your payment.</p>
+          </div>
+        ) : null}
+
+        <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-2xl bg-black/30 p-3">
+            <p className="text-xs text-zinc-500">Tier</p>
+            <p className="mt-1 font-semibold text-white capitalize">{tier}</p>
+          </div>
+          <div className="rounded-2xl bg-black/30 p-3">
+            <p className="text-xs text-zinc-500">Status</p>
+            <p className="mt-1 font-semibold text-white capitalize">{profile.subscription_status || 'free'}</p>
+          </div>
+          <div className="rounded-2xl bg-black/30 p-3">
+            <p className="text-xs text-zinc-500">Credits</p>
+            <p className="mt-1 font-semibold text-white">{profile.credits}</p>
+          </div>
+          <div className="rounded-2xl bg-black/30 p-3">
+            <p className="text-xs text-zinc-500">TSS</p>
+            <p className="mt-1 font-semibold text-white">{profile.tss_credits}</p>
+          </div>
+        </div>
+
         <button
           onClick={handleConvertCredits}
           disabled={loading || profile.credits < 20}
@@ -159,12 +205,12 @@ export default function ProfilePage() {
           <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
         ) : null}
         {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
-        {profile?.stripe_customer_id ? (
+        {hasSubscription ? (
           <button
-            className="panel mt-4 w-full text-left p-4 border border-white/10 rounded-md bg-black/20 text-sm text-zinc-100"
+            className="panel mt-4 w-full text-left p-4 border border-red-400/20 rounded-md bg-red-400/5 text-sm text-red-200 transition hover:border-red-400/40"
             onClick={handleManagePortal}
           >
-            Manage Subscription (Stripe Portal)
+            Cancel / Manage Subscription
           </button>
         ) : null}
       </section>
