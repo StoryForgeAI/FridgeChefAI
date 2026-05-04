@@ -125,7 +125,7 @@ export default function ProfilePage() {
     pro: (process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || '') as string,
     chef: (process.env.NEXT_PUBLIC_STRIPE_CHEF_PRICE_ID || '') as string
   };
-  const allPricesConfigured = Boolean(priceIdsTop.standard && priceIdsTop.pro && priceIdsTop.chef);
+  const hasAnyPriceConfigured = Boolean(priceIdsTop.standard || priceIdsTop.pro || priceIdsTop.chef);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -159,12 +159,14 @@ export default function ProfilePage() {
           <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
         ) : null}
         {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
-        <button
-          className="panel mt-4 w-full text-left p-4 border border-white/10 rounded-md bg-black/20 text-sm text-zinc-100"
-          onClick={handleManagePortal}
-        >
-          Manage Subscription (Stripe Portal)
-        </button>
+        {profile?.stripe_customer_id ? (
+          <button
+            className="panel mt-4 w-full text-left p-4 border border-white/10 rounded-md bg-black/20 text-sm text-zinc-100"
+            onClick={handleManagePortal}
+          >
+            Manage Subscription (Stripe Portal)
+          </button>
+        ) : null}
       </section>
 
       <section className="space-y-4">
@@ -173,7 +175,7 @@ export default function ProfilePage() {
           Upgrade your tier
         </div>
 
-        {!allPricesConfigured ? (
+        {!hasAnyPriceConfigured ? (
           <p className="mt-2 text-sm text-zinc-400">Upgrade pricing is not configured in this environment.</p>
         ) : null}
 
@@ -186,7 +188,7 @@ export default function ProfilePage() {
               key={planTier}
               onClick={() => handleUpgrade(planTier)}
               className={`panel w-full p-5 text-left transition ${isActive ? 'border-yellow-400/30 bg-yellow-400/10' : ''}`}
-              disabled={!allPricesConfigured}
+              disabled={!hasAnyPriceConfigured}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
