@@ -17,15 +17,19 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    const isSuccess = typeof window !== 'undefined' && window.location.search.includes('success=true');
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const isSuccess = params?.get('success') === 'true';
+    const sessionId = params?.get('session_id');
+
     if (isSuccess && profile?.id) {
       setProcessingPayment(true);
       const attemptSync = async () => {
         try {
+          await new Promise(r => setTimeout(r, 1500));
           const res = await fetch('/api/stripe/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: profile.id, email })
+            body: JSON.stringify({ userId: profile.id, sessionId })
           });
           const result = await res.json();
           if (result.synced) {

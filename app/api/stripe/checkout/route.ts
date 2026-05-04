@@ -19,11 +19,11 @@ export async function POST(req: NextRequest) {
       subscription_data: {
         metadata: { user_id: userId }
       },
-      success_url: `${origin}/profile?success=true`,
+      success_url: `${origin}/profile?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/profile?canceled=true`
     });
 
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url: session.url, sessionId: session.id });
   } catch {
     return NextResponse.json({ error: 'Checkout failed' }, { status: 500 });
   }

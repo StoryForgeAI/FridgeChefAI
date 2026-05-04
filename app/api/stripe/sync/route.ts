@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { STRIPE_TIERS, type SubscriptionTier } from '@/lib/types';
+import { STRIPE_STANDARD_PRICE_ID, STRIPE_PRO_PRICE_ID, STRIPE_CHEF_PRICE_ID } from '@/lib/server-config';
 
 export const runtime = 'nodejs';
 
 function resolveTierFromPrice(priceId: string): SubscriptionTier {
-  if (priceId === process.env.STRIPE_STANDARD_PRICE_ID) return 'standard';
-  if (priceId === process.env.STRIPE_PRO_PRICE_ID) return 'pro';
-  if (priceId === process.env.STRIPE_CHEF_PRICE_ID) return 'chef';
+  if (priceId === STRIPE_STANDARD_PRICE_ID) return 'standard';
+  if (priceId === STRIPE_PRO_PRICE_ID) return 'pro';
+  if (priceId === STRIPE_CHEF_PRICE_ID) return 'chef';
   return 'free';
 }
 
@@ -16,60 +17,70 @@ export async function POST(req: NextRequest) {
   const supabaseAdmin: any = getSupabaseAdmin();
 
   try {
-    const { userId, email } = await req.json();
+    const { userId, sessionId } = await req.json();
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }
 
-    console.log('[Stripe Sync] Syncing for user:', userId);
+    console.log('[Stripe Sync] Starting sync for user:', userId, 'sessionId:', sessionId);
 
-    // 1. Get profile
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    let subscription: any = null;
 
-    let customerId = profile?.stripe_customer_id;
+    // 1. If we have a session ID, retrieve the checkout session
+    if (sessionId) {
+      console.log('[Stripe Sync] Retrieving checkout session:', sessionId);
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      console.log('[Stripe Sync] Session payment_status:', session.payment_status, 'subscription:', session.subscription);
 
-    // 2. If no customer ID in DB, try to find by email in Stripe
-    if (!customerId && email) {
-      console.log('[Stripe Sync] No customer ID in DB, looking up by email:', email);
-      const customers = await stripe.customers.list({ email, limit: 1 });
-      if (customers.data.length > 0) {
-        customerId = customers.data[0].id;
-        console.log('[Stripe Sync] Found Stripe customer by email:', customerId);
-        
-        // Save it to the profile for next time
-        await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId);
+      if (session.subscription) {
+        const subId = typeof session.subscription === 'string' ? session.subscription : (session.subscription as any).id;
+        console.log('[Stripe Sync] Retrieving subscription:', subId);
+        subscription = await stripe.subscriptions.retrieve(subId, {
+          expand: ['items.data.price']
+        });
+        console.log('[Stripe Sync] Subscription status:', subscription.status, 'items:', subscription.items.data.length);
       }
     }
 
-    if (!customerId) {
-      console.log('[Stripe Sync] No Stripe customer found');
-      return NextResponse.json({ synced: false, reason: 'no_customer' });
+    // 2. Fallback: look up by customer
+    if (!subscription) {
+      console.log('[Stripe Sync] No subscription from session, trying customer lookup');
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('stripe_customer_id')
+        .eq('id', userId)
+        .single();
+
+      const customerId = profile?.stripe_customer_id;
+      if (customerId) {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: customerId,
+          limit: 1,
+          status: 'all'
+        });
+        if (subscriptions.data.length > 0) {
+          subscription = subscriptions.data[0];
+          console.log('[Stripe Sync] Found subscription via customer:', subscription.id, subscription.status);
+        }
+      }
     }
 
-    // 3. List active subscriptions
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      limit: 1,
-      status: 'active'
-    });
-
-    if (subscriptions.data.length === 0) {
-      console.log('[Stripe Sync] No active subscriptions found');
-      return NextResponse.json({ synced: false, reason: 'no_active_subscription' });
+    if (!subscription) {
+      console.log('[Stripe Sync] No subscription found anywhere');
+      return NextResponse.json({ synced: false, reason: 'no_subscription' });
     }
 
-    const subscription = subscriptions.data[0];
+    // 3. Get tier and config
     const priceId = subscription.items.data[0]?.price?.id;
+    console.log('[Stripe Sync] Price ID from subscription:', priceId);
+    console.log('[Stripe Sync] Server price IDs:', { standard: STRIPE_STANDARD_PRICE_ID, pro: STRIPE_PRO_PRICE_ID, chef: STRIPE_CHEF_PRICE_ID });
+
     const tier = resolveTierFromPrice(priceId);
     const config = STRIPE_TIERS[tier];
 
-    console.log('[Stripe Sync] Found active subscription:', { id: subscription.id, tier, status: subscription.status });
+    console.log('[Stripe Sync] Resolved tier:', tier, 'config:', config);
 
-    // 4. Update profile with subscription data and credits
+    // 4. Update profile
     await supabaseAdmin
       .from('profiles')
       .update({
@@ -87,7 +98,7 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', userId);
 
-    console.log('[Stripe Sync] Profile updated successfully');
+    console.log('[Stripe Sync] Profile updated successfully!');
 
     return NextResponse.json({
       synced: true,
@@ -96,6 +107,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('[Stripe Sync] Error:', error);
-    return NextResponse.json({ synced: false, error: 'Sync failed' }, { status: 500 });
+    return NextResponse.json({ synced: false, error: String(error) }, { status: 500 });
   }
 }
