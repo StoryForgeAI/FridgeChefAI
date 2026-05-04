@@ -16,27 +16,41 @@ export async function POST(req: NextRequest) {
   const supabaseAdmin: any = getSupabaseAdmin();
 
   try {
-    const { userId } = await req.json();
+    const { userId, email } = await req.json();
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }
 
-    console.log('[Stripe Sync] Looking up subscriptions for user:', userId);
+    console.log('[Stripe Sync] Syncing for user:', userId);
 
-    // Get profile to find Stripe customer
+    // 1. Get profile
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('stripe_customer_id')
+      .select('*')
       .eq('id', userId)
       .single();
 
-    const customerId = profile?.stripe_customer_id;
+    let customerId = profile?.stripe_customer_id;
+
+    // 2. If no customer ID in DB, try to find by email in Stripe
+    if (!customerId && email) {
+      console.log('[Stripe Sync] No customer ID in DB, looking up by email:', email);
+      const customers = await stripe.customers.list({ email, limit: 1 });
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id;
+        console.log('[Stripe Sync] Found Stripe customer by email:', customerId);
+        
+        // Save it to the profile for next time
+        await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId);
+      }
+    }
+
     if (!customerId) {
-      console.log('[Stripe Sync] No Stripe customer found for user');
+      console.log('[Stripe Sync] No Stripe customer found');
       return NextResponse.json({ synced: false, reason: 'no_customer' });
     }
 
-    // List subscriptions for this customer
+    // 3. List active subscriptions
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       limit: 1,
@@ -53,14 +67,9 @@ export async function POST(req: NextRequest) {
     const tier = resolveTierFromPrice(priceId);
     const config = STRIPE_TIERS[tier];
 
-    console.log('[Stripe Sync] Found active subscription:', {
-      subscriptionId: subscription.id,
-      priceId,
-      tier,
-      status: subscription.status
-    });
+    console.log('[Stripe Sync] Found active subscription:', { id: subscription.id, tier, status: subscription.status });
 
-    // Update profile
+    // 4. Update profile with subscription data and credits
     await supabaseAdmin
       .from('profiles')
       .update({

@@ -25,7 +25,7 @@ export default function ProfilePage() {
           const res = await fetch('/api/stripe/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: profile.id })
+            body: JSON.stringify({ userId: profile.id, email })
           });
           const result = await res.json();
           if (result.synced) {
