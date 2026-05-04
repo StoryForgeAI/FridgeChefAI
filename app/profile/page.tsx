@@ -59,11 +59,19 @@ export default function ProfilePage() {
   }
 
   async function handleUpgrade(tier: Exclude<SubscriptionTier, 'free'>) {
+    // Price IDs must be exposed to the client via NEXT_PUBLIC_ environment variables
     const priceIds = {
-      standard: process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID!,
-      pro: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID!,
-      chef: process.env.NEXT_PUBLIC_STRIPE_CHEF_PRICE_ID!
+      standard: (process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID || '') as string,
+      pro: (process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || '') as string,
+      chef: (process.env.NEXT_PUBLIC_STRIPE_CHEF_PRICE_ID || '') as string
     };
+
+    const priceId = priceIds[tier];
+    if (!priceId) {
+      // Helpful feedback if configuration is missing
+      setActionError('Upgrade price is not configured for this tier. Please contact support.');
+      return;
+    }
 
     const response = await fetch('/api/stripe/checkout', {
       method: 'POST',
@@ -71,7 +79,7 @@ export default function ProfilePage() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        priceId: priceIds[tier],
+        priceId,
         userId: profile?.id,
         email
       })
