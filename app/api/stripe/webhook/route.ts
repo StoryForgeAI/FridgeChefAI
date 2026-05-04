@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     const event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
     console.log('[Stripe Webhook] Event received:', event.type);
 
-    // Checkout session completed – this fires right after payment
+    // 1. Checkout session completed
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as any;
       const userId = session?.metadata?.user_id || session?.customer_details?.email;
@@ -74,19 +74,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Subscription created or updated
+    // 2. Subscription created or updated
     if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
       const subscription = event.data.object as any;
       const userId = subscription.metadata?.user_id;
 
       console.log('[Stripe Webhook] Subscription event:', { userId, subscriptionId: subscription.id, status: subscription.status });
 
+      // If a new subscription is created, cancel any other active subscription for the same customer
+      if (event.type === 'customer.subscription.created' && subscription.customer) {
+        const existingSubs = await stripe.subscriptions.list({
+          customer: subscription.customer,
+          status: 'all',
+          limit: 10
+        });
+
+        for (const sub of existingSubs.data) {
+          if (sub.id !== subscription.id && (sub.status === 'active' || sub.status === 'trialing')) {
+            console.log('[Stripe Webhook] Cancelling previous active subscription:', sub.id);
+            await stripe.subscriptions.cancel(sub.id);
+          }
+        }
+      }
+
       if (userId) {
         await updateProfileSubscription(userId, subscription);
       }
     }
 
-    // Invoice payment succeeded – award monthly credits on subscription_cycle
+    // 3. Invoice payment succeeded – award monthly credits ONLY if subscription is still active
     if (event.type === 'invoice.payment_succeeded') {
       const invoice = event.data.object as any;
       const subscriptionId = invoice?.subscription;
@@ -98,33 +114,39 @@ export async function POST(req: NextRequest) {
         const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
           expand: ['items.data.price', 'metadata']
         });
-        const userId = subscription.metadata?.user_id;
-        const priceId = subscription.items.data[0]?.price?.id;
-        const tier = resolveTierFromPrice(priceId);
-        const config = STRIPE_TIERS[tier];
 
-        if (userId) {
-          const admin: any = getSupabaseAdmin();
-          const { data: current } = await admin.from('profiles').select('credits, tss_credits').eq('id', userId).single();
-          const currentData = current as any;
-          const newCredits = (currentData?.credits ?? 0) + config.credits;
-          const newTss = (currentData?.tss_credits ?? 0) + config.tss_credits;
+        // Check if subscription is still active
+        if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+          console.log('[Stripe Webhook] Subscription not active, skipping credits');
+        } else {
+          const userId = subscription.metadata?.user_id;
+          const priceId = subscription.items.data[0]?.price?.id;
+          const tier = resolveTierFromPrice(priceId);
+          const config = STRIPE_TIERS[tier];
 
-          console.log('[Stripe Webhook] Awarding monthly credits:', { userId, newCredits, newTss });
+          if (userId) {
+            const admin: any = getSupabaseAdmin();
+            const { data: current } = await admin.from('profiles').select('credits, tss_credits').eq('id', userId).single();
+            const currentData = current as any;
+            const newCredits = (currentData?.credits ?? 0) + config.credits;
+            const newTss = (currentData?.tss_credits ?? 0) + config.tss_credits;
 
-          await admin.from('profiles').update({
-            credits: newCredits,
-            tss_credits: newTss,
-            tier,
-            subscription_tier: tier,
-            subscription_status: subscription.status,
-            stripe_subscription_id: subscription.id
-          }).eq('id', userId);
+            console.log('[Stripe Webhook] Awarding monthly credits:', { userId, newCredits, newTss });
+
+            await admin.from('profiles').update({
+              credits: newCredits,
+              tss_credits: newTss,
+              tier,
+              subscription_tier: tier,
+              subscription_status: subscription.status,
+              stripe_subscription_id: subscription.id
+            }).eq('id', userId);
+          }
         }
       }
     }
 
-    // Subscription deleted/canceled
+    // 4. Subscription deleted/canceled
     if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object as any;
       const userId = subscription.metadata?.user_id;

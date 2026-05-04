@@ -8,151 +8,99 @@ export const runtime = 'nodejs';
 
 function resolveTierFromPrice(priceId: string): SubscriptionTier {
   console.log('[Stripe Sync] Resolving tier for priceId:', priceId);
-  console.log('[Stripe Sync] Env standard:', STRIPE_STANDARD_PRICE_ID);
-  console.log('[Stripe Sync] Env pro:', STRIPE_PRO_PRICE_ID);
-  console.log('[Stripe Sync] Env chef:', STRIPE_CHEF_PRICE_ID);
-  
   if (priceId === STRIPE_STANDARD_PRICE_ID) return 'standard';
   if (priceId === STRIPE_PRO_PRICE_ID) return 'pro';
   if (priceId === STRIPE_CHEF_PRICE_ID) return 'chef';
   return 'free';
 }
 
+async function updateProfile(supabaseAdmin: any, userId: string, subscription: any) {
+  const priceId = subscription.items.data[0]?.price?.id;
+  const tier = resolveTierFromPrice(priceId);
+  const config = STRIPE_TIERS[tier];
+
+  console.log('[Stripe Sync] Updating profile:', { userId, tier, priceId, config });
+
+  const { data: current } = await supabaseAdmin.from('profiles').select('credits, tss_credits').eq('id', userId).single();
+  const currentCredits = current?.credits ?? 20;
+  const currentTss = current?.tss_credits ?? 0;
+
+  const { error } = await supabaseAdmin
+    .from('profiles')
+    .update({
+      tier,
+      subscription_tier: tier,
+      subscription_status: subscription.status,
+      stripe_customer_id: subscription.customer,
+      stripe_subscription_id: subscription.id,
+      credits: currentCredits + config.credits,
+      tss_credits: currentTss + config.tss_credits,
+      discount_percent: config.discount,
+      item_limit: config.itemLimit,
+      recipe_suggestion_limit: config.recipeSuggestions,
+      stats_access_level: config.statsAccessLevel
+    })
+    .eq('id', userId);
+
+  if (error) throw error;
+  return { tier, credits: currentCredits + config.credits, tss_credits: currentTss + config.tss_credits };
+}
+
 export async function POST(req: NextRequest) {
   const supabaseAdmin: any = getSupabaseAdmin();
 
   try {
-    const body = await req.json();
-    const { userId, sessionId } = body;
-    console.log('[Stripe Sync] Received request:', JSON.stringify(body));
+    const { userId, sessionId } = await req.json();
+    if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
-    }
+    console.log('[Stripe Sync] Syncing user:', userId);
 
     let subscription: any = null;
-    let lastError = '';
 
-    // 1. Try via session ID
+    // 1. Try session ID first
     if (sessionId) {
       try {
-        console.log('[Stripe Sync] Retrieving checkout session:', sessionId);
         const session = await stripe.checkout.sessions.retrieve(sessionId);
-        console.log('[Stripe Sync] Session:', { id: session.id, payment_status: session.payment_status, subscription: session.subscription });
-
+        console.log('[Stripe Sync] Session status:', session.payment_status, 'sub:', session.subscription);
+        
         if (session.subscription) {
           const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
-          subscription = await stripe.subscriptions.retrieve(subId, {
-            expand: ['items.data.price']
-          });
-          console.log('[Stripe Sync] Subscription from session:', { id: subscription.id, status: subscription.status, priceId: subscription.items.data[0]?.price?.id });
-        } else {
-          lastError = 'Session has no subscription object';
+          subscription = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price'] });
         }
       } catch (err: any) {
-        lastError = `Session retrieve failed: ${err.message}`;
-        console.log('[Stripe Sync] Session retrieve error:', lastError);
+        console.log('[Stripe Sync] Session retrieve failed:', err.message);
       }
     }
 
-    // 2. Fallback: lookup by customer
+    // 2. Fallback: List all subscriptions for the customer
     if (!subscription) {
-      try {
-        console.log('[Stripe Sync] Trying customer lookup');
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
-          .select('stripe_customer_id')
-          .eq('id', userId)
-          .single();
-
-        const customerId = profile?.stripe_customer_id;
-        if (customerId) {
-          const subscriptions = await stripe.subscriptions.list({
-            customer: customerId,
-            limit: 3,
-            status: 'all'
-          });
-          console.log('[Stripe Sync] Customer subscriptions found:', subscriptions.data.length);
-          
-          // Get the most recent active or trialing subscription
-          for (const sub of subscriptions.data) {
-            if (sub.status === 'active' || sub.status === 'trialing') {
-              subscription = sub;
-              break;
-            }
-          }
-          
-          if (subscription) {
-            // Re-retrieve with expanded price if needed
-            if (!subscription.items.data[0]?.price?.id) {
-              subscription = await stripe.subscriptions.retrieve(subscription.id, {
-                expand: ['items.data.price']
-              });
-            }
-            console.log('[Stripe Sync] Found subscription via customer:', subscription.id, subscription.status);
-          } else {
-            lastError = 'No active/trialing subscriptions for customer';
-          }
-        } else {
-          lastError = 'No stripe_customer_id in profile';
+      const { data: profile } = await supabaseAdmin.from('profiles').select('stripe_customer_id').eq('id', userId).single();
+      const customerId = profile?.stripe_customer_id;
+      
+      if (customerId) {
+        const subs = await stripe.subscriptions.list({ customer: customerId, limit: 10, status: 'all' });
+        // Prefer active/trialing, then look for any
+        const activeSub = subs.data.find(s => s.status === 'active' || s.status === 'trialing');
+        if (activeSub) {
+          subscription = await stripe.subscriptions.retrieve(activeSub.id, { expand: ['items.data.price'] });
+        } else if (subs.data.length > 0) {
+          // Take the latest one if no active
+          subscription = await stripe.subscriptions.retrieve(subs.data[0].id, { expand: ['items.data.price'] });
         }
-      } catch (err: any) {
-        lastError = `Customer lookup failed: ${err.message}`;
-        console.log('[Stripe Sync] Customer lookup error:', lastError);
       }
     }
 
     if (!subscription) {
-      console.log('[Stripe Sync] No subscription found. Last error:', lastError);
-      return NextResponse.json({ synced: false, reason: 'no_subscription', error: lastError });
+      console.log('[Stripe Sync] No subscription found');
+      return NextResponse.json({ synced: false, reason: 'no_subscription' });
     }
 
-    // 3. Resolve tier
-    const priceId = subscription.items.data[0]?.price?.id;
-    const tier = resolveTierFromPrice(priceId);
-    const config = STRIPE_TIERS[tier];
+    console.log('[Stripe Sync] Found subscription:', { id: subscription.id, status: subscription.status });
 
-    console.log('[Stripe Sync] Tier:', tier, 'Price ID:', priceId, 'Config:', config);
-
-    // 4. Get current credits to ADD new ones
-    const { data: currentProfile } = await supabaseAdmin.from('profiles').select('credits, tss_credits').eq('id', userId).single();
-    const currentCredits = currentProfile?.credits ?? 20; // default free tier
-    const currentTss = currentProfile?.tss_credits ?? 0;
-
-    // 5. Update profile (ADD credits, don't overwrite)
-    const { error: updateError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        tier,
-        subscription_tier: tier,
-        subscription_status: subscription.status,
-        stripe_customer_id: subscription.customer,
-        stripe_subscription_id: subscription.id,
-        credits: currentCredits + config.credits,
-        tss_credits: currentTss + config.tss_credits,
-        discount_percent: config.discount,
-        item_limit: config.itemLimit,
-        recipe_suggestion_limit: config.recipeSuggestions,
-        stats_access_level: config.statsAccessLevel
-      })
-      .eq('id', userId);
-
-    if (updateError) {
-      console.error('[Stripe Sync] DB update error:', updateError);
-      return NextResponse.json({ synced: false, error: updateError.message });
-    }
-
-    console.log('[Stripe Sync] SUCCESS! Profile updated');
-
-    return NextResponse.json({
-      synced: true,
-      tier,
-      subscriptionId: subscription.id,
-      credits: config.credits,
-      tss_credits: config.tss_credits
-    });
+    const result = await updateProfile(supabaseAdmin, userId, subscription);
+    return NextResponse.json({ synced: true, ...result });
   } catch (error: any) {
-    console.error('[Stripe Sync] Fatal error:', error);
+    console.error('[Stripe Sync] Fatal:', error);
     return NextResponse.json({ synced: false, error: error.message }, { status: 500 });
   }
 }
