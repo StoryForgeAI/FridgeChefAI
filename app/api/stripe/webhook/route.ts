@@ -98,7 +98,27 @@ export async function POST(req: NextRequest) {
       }
 
       if (userId) {
-        await updateProfileSubscription(userId, subscription);
+        // If the subscription was updated to a non-active status, reset to free
+        if (subscription.status === 'canceled' || subscription.status === 'incomplete_expired') {
+          const config = STRIPE_TIERS.free;
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              tier: 'free',
+              subscription_tier: 'free',
+              subscription_status: subscription.status,
+              stripe_subscription_id: null,
+              credits: config.credits,
+              tss_credits: config.tss_credits,
+              discount_percent: config.discount,
+              item_limit: config.itemLimit,
+              recipe_suggestion_limit: config.recipeSuggestions,
+              stats_access_level: config.statsAccessLevel
+            })
+            .eq('id', userId);
+        } else {
+          await updateProfileSubscription(userId, subscription);
+        }
       }
     }
 

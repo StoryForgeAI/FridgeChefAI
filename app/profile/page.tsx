@@ -190,7 +190,8 @@ export default function ProfilePage() {
   }
 
   const tier = resolveProfileTier(profile);
-  const hasSubscription = Boolean(profile.stripe_subscription_id);
+  const isActiveSubscription = profile.subscription_status === 'active' || profile.subscription_status === 'trialing';
+  const hasSubscription = isActiveSubscription;
 
   // Client-side price configuration check (pricing IDs exposed as NEXT_PUBLIC_ vars)
   const priceIdsTop = {
@@ -280,7 +281,7 @@ export default function ProfilePage() {
           <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
         ) : null}
         {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
-        {hasSubscription ? (
+        {profile?.stripe_customer_id ? (
           <button
             className="panel mt-4 w-full text-left p-4 border border-red-400/20 rounded-md bg-red-400/5 text-sm text-red-200 transition hover:border-red-400/40"
             onClick={handleManagePortal}
@@ -293,60 +294,52 @@ export default function ProfilePage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2 text-sm text-zinc-300">
           <Sparkles className="h-4 w-4 text-yellow-300" />
-          {hasSubscription ? 'Manage your plan' : 'Upgrade your tier'}
+          Upgrade your tier
         </div>
 
+        {!hasAnyPriceConfigured ? (
+          <p className="mt-2 text-sm text-zinc-400">Upgrade pricing is not configured in this environment.</p>
+        ) : null}
+
         {hasSubscription ? (
-          <div className="panel w-full p-5 text-left border border-green-400/30 bg-green-400/10">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-lg font-semibold text-white">Subscription Active</p>
-                <p className="mt-2 text-sm text-zinc-400">You already subscribed to another plan.</p>
-                <p className="mt-1 text-xs text-zinc-500">Use the "Cancel / Manage Subscription" button below to change your plan or cancel.</p>
-              </div>
-            </div>
+          <div className="panel w-full p-4 text-left border border-yellow-400/20 bg-yellow-400/10 rounded-2xl">
+            <p className="text-sm text-yellow-100">You already subscribed to another plan. Choosing a new plan below will replace your current one.</p>
           </div>
-        ) : (
-          <>
-            {!hasAnyPriceConfigured ? (
-              <p className="mt-2 text-sm text-zinc-400">Upgrade pricing is not configured in this environment.</p>
-            ) : null}
+        ) : null}
 
-            {(['standard', 'pro', 'chef'] as const).map((planTier) => {
-              const config = STRIPE_TIERS[planTier];
-              const isActive = tier === planTier;
+        {(['standard', 'pro', 'chef'] as const).map((planTier) => {
+          const config = STRIPE_TIERS[planTier];
+          const isActive = tier === planTier;
 
-              return (
-                <button
-                  key={planTier}
-                  onClick={() => handleUpgrade(planTier)}
-                  className={`panel w-full p-5 text-left transition ${isActive ? 'border-yellow-400/30 bg-yellow-400/10' : ''}`}
-                  disabled={!hasAnyPriceConfigured}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Crown className="h-4 w-4 text-yellow-300" />
-                        <span className="text-lg font-semibold text-white">{config.label}</span>
-                      </div>
-                      <p className="mt-2 text-sm text-zinc-400">
-                        {config.credits} credits / {config.tss_credits} TSS / {config.itemLimit} items
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-semibold text-white">${config.price}</p>
-                      <p className="text-xs text-zinc-500">per month</p>
-                    </div>
+          return (
+            <button
+              key={planTier}
+              onClick={() => handleUpgrade(planTier)}
+              className={`panel w-full p-5 text-left transition ${isActive ? 'border-yellow-400/30 bg-yellow-400/10' : ''}`}
+              disabled={!hasAnyPriceConfigured}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Crown className="h-4 w-4 text-yellow-300" />
+                    <span className="text-lg font-semibold text-white">{config.label}</span>
                   </div>
-                  <div className="mt-4 flex items-center justify-between rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-300">
-                    <span>{Math.round(config.discount * 100)}% discount / {config.recipeSuggestions} suggestions</span>
-                    <span className={isActive ? 'text-yellow-200' : 'text-zinc-500'}>{isActive ? 'Current plan' : 'Upgrade'}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </>
-        )}
+                  <p className="mt-2 text-sm text-zinc-400">
+                    {config.credits} credits / {config.tss_credits} TSS / {config.itemLimit} items
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-semibold text-white">${config.price}</p>
+                  <p className="text-xs text-zinc-500">per month</p>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-300">
+                <span>{Math.round(config.discount * 100)}% discount / {config.recipeSuggestions} suggestions</span>
+                <span className={isActive ? 'text-yellow-200' : 'text-zinc-500'}>{isActive ? 'Current plan' : isActiveSubscription ? 'Switch' : 'Upgrade'}</span>
+              </div>
+            </button>
+          );
+        })}
       </section>
     </div>
   );

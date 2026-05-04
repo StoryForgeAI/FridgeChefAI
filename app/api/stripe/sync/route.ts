@@ -79,13 +79,13 @@ export async function POST(req: NextRequest) {
       
       if (customerId) {
         const subs = await stripe.subscriptions.list({ customer: customerId, limit: 10, status: 'all' });
-        // Prefer active/trialing, then look for any
+        // Prefer active/trialing, then incomplete (being processed), then any
         const activeSub = subs.data.find(s => s.status === 'active' || s.status === 'trialing');
-        if (activeSub) {
-          subscription = await stripe.subscriptions.retrieve(activeSub.id, { expand: ['items.data.price'] });
-        } else if (subs.data.length > 0) {
-          // Take the latest one if no active
-          subscription = await stripe.subscriptions.retrieve(subs.data[0].id, { expand: ['items.data.price'] });
+        const incompleteSub = subs.data.find(s => s.status === 'incomplete' || s.status === 'incomplete_expired');
+        const chosen = activeSub || incompleteSub || subs.data[0];
+        if (chosen) {
+          subscription = await stripe.subscriptions.retrieve(chosen.id, { expand: ['items.data.price'] });
+          console.log('[Stripe Sync] Found via customer:', subscription.id, subscription.status);
         }
       }
     }
@@ -93,6 +93,12 @@ export async function POST(req: NextRequest) {
     if (!subscription) {
       console.log('[Stripe Sync] No subscription found');
       return NextResponse.json({ synced: false, reason: 'no_subscription' });
+    }
+
+    // Don't sync if subscription is definitely not valid
+    if (subscription.status === 'canceled' || subscription.status === 'incomplete_expired') {
+      console.log('[Stripe Sync] Subscription is', subscription.status, '- not syncing');
+      return NextResponse.json({ synced: false, reason: 'subscription_' + subscription.status });
     }
 
     console.log('[Stripe Sync] Found subscription:', { id: subscription.id, status: subscription.status });
