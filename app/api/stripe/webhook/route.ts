@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
         const tier = resolveTierFromPrice(priceId);
         const config = STRIPE_TIERS[tier];
         if (userId) {
-          const admin = getSupabaseAdmin();
+          const admin: any = getSupabaseAdmin();
           const { data: current } = await admin.from('profiles').select('*').eq('id', userId).single() as any;
           const currentData = current as any;
           const newCredits = (currentData?.credits ?? 0) + config.credits;
