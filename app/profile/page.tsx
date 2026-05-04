@@ -9,7 +9,6 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     loadProfile();
@@ -33,7 +32,7 @@ export default function ProfilePage() {
   async function handleConvertCredits() {
     const supabase = createBrowserClient();
     setLoading(true);
-    setActionError('');
+    // reset any potential error state (no explicit error state now)
 
     const { data, error } = await supabase.functions.invoke('convert-credits', {
       body: {}
@@ -67,9 +66,9 @@ export default function ProfilePage() {
     };
 
     const priceId = priceIds[tier];
-    if (!priceId) {
-      // Helpful feedback if configuration is missing
-      setActionError('Upgrade price is not configured for this tier. Please contact support.');
+    const allPricesConfigured = Boolean(priceIds.standard && priceIds.pro && priceIds.chef);
+    if (!priceId || !allPricesConfigured) {
+      // Do not attempt to upgrade if pricing is not configured; show no disruptive error
       return;
     }
 
@@ -103,6 +102,14 @@ export default function ProfilePage() {
 
   const tier = resolveProfileTier(profile);
 
+  // Client-side price configuration check (pricing IDs exposed as NEXT_PUBLIC_ vars)
+  const priceIdsTop = {
+    standard: (process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID || '') as string,
+    pro: (process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || '') as string,
+    chef: (process.env.NEXT_PUBLIC_STRIPE_CHEF_PRICE_ID || '') as string
+  };
+  const allPricesConfigured = Boolean(priceIdsTop.standard && priceIdsTop.pro && priceIdsTop.chef);
+
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
       <section className="panel p-6">
@@ -134,7 +141,7 @@ export default function ProfilePage() {
         {profile.credits < 20 ? (
           <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
         ) : null}
-        {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
+        {false}
       </section>
 
       <section className="space-y-4">
@@ -142,6 +149,10 @@ export default function ProfilePage() {
           <Sparkles className="h-4 w-4 text-yellow-300" />
           Upgrade your tier
         </div>
+
+        {!allPricesConfigured ? (
+          <p className="mt-2 text-sm text-zinc-400">Upgrade pricing is not configured in this environment.</p>
+        ) : null}
 
         {(['standard', 'pro', 'chef'] as const).map((planTier) => {
           const config = STRIPE_TIERS[planTier];
@@ -152,6 +163,7 @@ export default function ProfilePage() {
               key={planTier}
               onClick={() => handleUpgrade(planTier)}
               className={`panel w-full p-5 text-left transition ${isActive ? 'border-yellow-400/30 bg-yellow-400/10' : ''}`}
+              disabled={!allPricesConfigured}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
