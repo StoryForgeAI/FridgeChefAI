@@ -97,6 +97,22 @@ export default function ProfilePage() {
     window.location.href = '/login';
   }
 
+  async function handleManagePortal() {
+    if (!profile?.id) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://example.com';
+    const res = await fetch('/api/stripe/portal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ userId: profile.id, return_url: origin + '/profile' })
+    });
+    const data = await res.json();
+    if (data?.url) {
+      window.location.href = data.url;
+    }
+  }
+
   if (!profile) {
     return <div className="panel p-6 text-center text-zinc-300">Loading profile...</div>;
   }
@@ -143,6 +159,12 @@ export default function ProfilePage() {
           <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
         ) : null}
         {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
+        <button
+          className="panel mt-4 w-full text-left p-4 border border-white/10 rounded-md bg-black/20 text-sm text-zinc-100"
+          onClick={handleManagePortal}
+        >
+          Manage Subscription (Stripe Portal)
+        </button>
       </section>
 
       <section className="space-y-4">
