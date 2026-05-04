@@ -11,13 +11,12 @@ export async function POST(req: NextRequest) {
 
     // Fetch user profile to get Stripe customer id
     const admin = getSupabaseAdmin();
-    const { data: profile } = await admin
+    const { data } = await admin
       .from('profiles')
       .select('stripe_customer_id')
       .eq('id', userId)
-      .single()
-      .returns<{ stripe_customer_id: string | null }>();
-    const customer = profile?.stripe_customer_id;
+      .single();
+    const customer = (data as any)?.stripe_customer_id;
     if (!customer) {
       return NextResponse.json({ error: 'No Stripe customer found for user' }, { status: 400 });
     }
