@@ -14,25 +14,41 @@ export default function ProfilePage() {
 
   useEffect(() => {
     loadProfile();
+  }, []);
+
+  useEffect(() => {
     const isSuccess = typeof window !== 'undefined' && window.location.search.includes('success=true');
-    if (isSuccess) {
+    if (isSuccess && profile?.id) {
       setProcessingPayment(true);
-      const interval = setInterval(async () => {
-        const supabase = createBrowserClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-          setProfile(data);
-          if (data?.stripe_subscription_id) {
-            clearInterval(interval);
+      const attemptSync = async () => {
+        try {
+          const res = await fetch('/api/stripe/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: profile.id })
+          });
+          const result = await res.json();
+          if (result.synced) {
+            await loadProfile();
             setProcessingPayment(false);
             window.history.replaceState({}, '', '/profile');
           }
+        } catch {
+          // retry
         }
-      }, 2000);
-      return () => clearInterval(interval);
+      };
+      attemptSync();
+      const interval = setInterval(attemptSync, 2000);
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        setProcessingPayment(false);
+      }, 30000);
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      };
     }
-  }, []);
+  }, [profile?.id]);
 
   async function loadProfile() {
     const supabase = createBrowserClient();
