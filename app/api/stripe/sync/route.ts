@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     console.log('[Stripe Sync] Syncing user:', userId, 'session:', sessionId);
 
     // 1. Try session ID first
-    let priceId = '';
+    let priceId: string | undefined;
     if (sessionId) {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       priceId = session?.line_items?.data[0]?.price?.id;
