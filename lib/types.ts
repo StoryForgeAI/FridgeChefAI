@@ -174,3 +174,47 @@ export const PRODUCTS = {
 export function resolveProfileTier(profile?: Pick<Profile, 'tier' | 'subscription_tier'> | null): SubscriptionTier {
   return profile?.subscription_tier ?? profile?.tier ?? 'free';
 }
+
+// Kept for UI limits and tier display logic
+export const STRIPE_TIERS = {
+  free: {
+    label: 'Free',
+    price: 0,
+    credits: 20,
+    tss_credits: 0,
+    discount: 0,
+    itemLimit: 5,
+    recipeSuggestions: 5,
+    statsAccessLevel: 'basic' as StatsAccessLevel
+  },
+  standard: {
+    label: 'Standard',
+    price: 2.99,
+    credits: 250,
+    tss_credits: 10,
+    discount: 0.1,
+    itemLimit: 10,
+    recipeSuggestions: 5,
+    statsAccessLevel: 'basic' as StatsAccessLevel
+  },
+  pro: {
+    label: 'Pro',
+    price: 9.99,
+    credits: 3000,
+    tss_credits: 80,
+    discount: 0.25,
+    itemLimit: 50,
+    recipeSuggestions: 5,
+    statsAccessLevel: 'pro' as StatsAccessLevel
+  },
+  chef: {
+    label: 'Chef',
+    price: 18.99,
+    credits: 6500,
+    tss_credits: 160,
+    discount: 0.3,
+    itemLimit: 100,
+    recipeSuggestions: 10,
+    statsAccessLevel: 'ultra' as StatsAccessLevel
+  }
+} as const;
