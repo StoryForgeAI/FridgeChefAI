@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowRightLeft, Crown, LogOut, Sparkles } from 'lucide-react';
+import { ArrowRightLeft, Bolt, CreditCard, Crown, LogOut, Sparkles, Zap } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase';
-import { resolveProfileTier, STRIPE_TIERS, type Profile, type SubscriptionTier } from '@/lib/types';
+import { PRODUCTS, type Profile } from '@/lib/types';
+
+type ProductKey = keyof typeof PRODUCTS;
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [actionError, setActionError] = useState<string>('');
   const [processingPayment, setProcessingPayment] = useState(false);
   const [syncError, setSyncError] = useState<string>('');
   const [syncResult, setSyncResult] = useState<any>(null);
@@ -27,76 +28,50 @@ export default function ProfilePage() {
       setProcessingPayment(true);
       setSyncError('');
       let attempts = 0;
-      const maxAttempts = 20;
+      const maxAttempts = 15;
+      let isSyncing = false;
 
       const attemptSync = async () => {
+        if (isSyncing) return;
         attempts++;
+        isSyncing = true;
         try {
-          await new Promise(r => setTimeout(r, 1500));
           const res = await fetch('/api/stripe/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: profile.id, sessionId })
           });
           const result = await res.json();
-          console.log('[Profile] Sync result:', result);
           
           if (result.synced) {
             await loadProfile();
             setProcessingPayment(false);
             setSyncResult(result);
-            setSyncError('');
             window.history.replaceState({}, '', '/profile');
           } else if (attempts >= maxAttempts) {
             setProcessingPayment(false);
-            setSyncError(result.error || result.reason || 'Sync failed after multiple attempts');
+            setSyncError(result.error || result.reason || 'Sync failed');
           }
-        } catch (err: any) {
+        } catch {
           if (attempts >= maxAttempts) {
             setProcessingPayment(false);
-            setSyncError(err.message || 'Network error during sync');
+            setSyncError('Network error');
           }
+        } finally {
+          isSyncing = false;
         }
       };
-      attemptSync();
-      const interval = setInterval(attemptSync, 2000);
-      return () => clearInterval(interval);
+      
+      const timeout1 = setTimeout(attemptSync, 3000);
+      const interval = setInterval(attemptSync, 3000);
+      return () => { clearTimeout(timeout1); clearInterval(interval); };
     }
   }, [profile?.id]);
 
-  async function handleRetrySync() {
-    if (!profile?.id) return;
-    setProcessingPayment(true);
-    setSyncError('');
-    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const sessionId = params?.get('session_id');
-    
-    const res = await fetch('/api/stripe/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: profile.id, sessionId: sessionId || undefined })
-    });
-    const result = await res.json();
-    if (result.synced) {
-      await loadProfile();
-      setProcessingPayment(false);
-      window.history.replaceState({}, '', '/profile');
-    } else {
-      setProcessingPayment(false);
-      setSyncError(result.error || result.reason || 'Sync failed');
-    }
-  }
-
   async function loadProfile() {
     const supabase = createBrowserClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return;
-    }
-
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
     setEmail(user.email ?? '');
     const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     setProfile(data);
@@ -105,242 +80,152 @@ export default function ProfilePage() {
   async function handleConvertCredits() {
     const supabase = createBrowserClient();
     setLoading(true);
-    setActionError('');
-
-    const { data, error } = await supabase.functions.invoke('convert-credits', {
-      body: {}
-    });
-
-    if (error) {
-      setActionError(error.message || 'Credit conversion failed.');
-    } else {
-      if (data?.profile && profile) {
-        setProfile({
-          ...profile,
-          credits: data.profile.credits,
-          tss_credits: data.profile.tss_credits
-        });
-      } else {
-        await loadProfile();
-      }
-
-      window.dispatchEvent(new Event('fridgechef:profile-refresh'));
+    const { data, error } = await supabase.functions.invoke('convert-credits', { body: {} });
+    if (!error && data?.profile) {
+      await loadProfile();
     }
-
     setLoading(false);
   }
 
-  async function handleUpgrade(tier: Exclude<SubscriptionTier, 'free'>) {
-    // Price IDs must be exposed to the client via NEXT_PUBLIC_ environment variables
-    const priceIds = {
-      standard: (process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID || '') as string,
-      pro: (process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || '') as string,
-      chef: (process.env.NEXT_PUBLIC_STRIPE_CHEF_PRICE_ID || '') as string
-    };
-
-    const priceId = priceIds[tier];
-    const allPricesConfigured = Boolean(priceIds.standard && priceIds.pro && priceIds.chef);
-    if (!priceId || !allPricesConfigured) {
-      // Do not attempt to upgrade if pricing is not configured; show no disruptive error
-      return;
-    }
-
-    const response = await fetch('/api/stripe/checkout', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        priceId,
-        userId: profile?.id,
-        email
-      })
-    });
-
-    const { url } = await response.json();
-    if (url) {
-      window.location.href = url;
-    }
-  }
-
   async function handleSignOut() {
-    const supabase = createBrowserClient();
-    await supabase.auth.signOut();
+    await createBrowserClient().auth.signOut();
     window.location.href = '/login';
   }
 
-  async function handleManagePortal() {
-    if (!profile?.id) return;
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://example.com';
-    const res = await fetch('/api/stripe/portal', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ userId: profile.id, return_url: origin + '/profile' })
-    });
-    const data = await res.json();
-    if (data?.url) {
-      window.location.href = data.url;
+  async function handlePurchase(productKey: ProductKey) {
+    if (!profile) return;
+
+    setProcessingPayment(true);
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productKey, userId: profile.id, email })
+      });
+      const { url } = await response.json();
+      if (url) window.location.href = url;
+    } catch {
+      setProcessingPayment(false);
     }
   }
 
-  if (!profile) {
-    return <div className="panel p-6 text-center text-zinc-300">Loading profile...</div>;
-  }
-
-  const tier = resolveProfileTier(profile);
-  const isActiveSubscription = profile.subscription_status === 'active' || profile.subscription_status === 'trialing';
-  const hasSubscription = isActiveSubscription;
-
-  // Client-side price configuration check (pricing IDs exposed as NEXT_PUBLIC_ vars)
-  const priceIdsTop = {
-    standard: (process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID || '') as string,
-    pro: (process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || '') as string,
-    chef: (process.env.NEXT_PUBLIC_STRIPE_CHEF_PRICE_ID || '') as string
-  };
-  const hasAnyPriceConfigured = Boolean(priceIdsTop.standard || priceIdsTop.pro || priceIdsTop.chef);
+  if (!profile) return <div className="panel p-6 text-center text-zinc-300">Loading profile...</div>;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)]">
+      {/* Profile Header & Balance */}
       <section className="panel p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
+          <div>
             <p className="text-xs uppercase tracking-[0.26em] text-yellow-300/75">Profile</p>
-            <h1 className="mt-2 break-all text-xl font-semibold text-white sm:text-3xl">
-              {email || 'FridgeChef User'}
-            </h1>
+            <h1 className="mt-2 break-all text-xl font-semibold text-white sm:text-3xl">{email || 'FridgeChef User'}</h1>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:border-yellow-400/40 hover:text-yellow-100"
-          >
-            <LogOut className="h-4 w-4" />
-            Sign out
+          <button onClick={handleSignOut} className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:border-red-400/40 hover:text-red-100">
+            <LogOut className="h-4 w-4" /> Sign out
           </button>
         </div>
 
-        {processingPayment ? (
-          <div className="mt-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-center">
-            <p className="text-sm text-yellow-200">Processing your subscription...</p>
-            <p className="mt-1 text-xs text-zinc-400">Please wait while we confirm your payment.</p>
+        <div className="mt-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <div className="rounded-2xl bg-black/30 p-4 text-center">
+            <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Credits</p>
+            <p className="mt-1 text-3xl font-bold text-yellow-100">{profile.credits}</p>
           </div>
-        ) : null}
-
-        {syncError ? (
-          <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-4">
-            <p className="text-sm text-red-200">Could not confirm subscription</p>
-            <p className="mt-1 text-xs text-zinc-400 font-mono">{syncError}</p>
-            <button
-              onClick={handleRetrySync}
-              className="mt-3 rounded-full bg-red-400/20 px-4 py-2 text-sm text-red-200 transition hover:bg-red-400/30"
-            >
-              Retry Sync
+          <div className="rounded-2xl bg-black/30 p-4 text-center">
+            <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">TSS Credits</p>
+            <p className="mt-1 text-3xl font-bold text-yellow-100">{profile.tss_credits}</p>
+          </div>
+          <div className="rounded-2xl bg-black/30 p-4 flex flex-col items-center justify-center gap-2">
+            <button onClick={handleConvertCredits} disabled={loading || profile.credits < 20} className="secondary-button w-full gap-2 text-xs disabled:opacity-50">
+              <ArrowRightLeft className="h-3 w-3" /> Convert 20 Cr to 1 TSS
             </button>
+            {profile.credits < 20 && <p className="text-[10px] text-zinc-500">Need 20 credits</p>}
           </div>
-        ) : null}
-
-        {syncResult?.synced ? (
-          <div className="mt-4 rounded-2xl border border-green-400/30 bg-green-400/10 p-4">
-            <p className="text-sm text-green-200">Subscription confirmed!</p>
-            <p className="mt-1 text-xs text-zinc-400">
-              {syncResult.tier} tier • {syncResult.credits} credits • {syncResult.tss_credits} TSS
-            </p>
-          </div>
-        ) : null}
-
-        <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-2xl bg-black/30 p-3">
-            <p className="text-xs text-zinc-500">Tier</p>
-            <p className="mt-1 font-semibold text-white capitalize">{tier}</p>
-          </div>
-          <div className="rounded-2xl bg-black/30 p-3">
-            <p className="text-xs text-zinc-500">Status</p>
-            <p className="mt-1 font-semibold text-white capitalize">{profile.subscription_status || 'free'}</p>
-          </div>
-          <div className="rounded-2xl bg-black/30 p-3">
-            <p className="text-xs text-zinc-500">Credits</p>
-            <p className="mt-1 font-semibold text-white">{profile.credits}</p>
-          </div>
-          <div className="rounded-2xl bg-black/30 p-3">
-            <p className="text-xs text-zinc-500">TSS</p>
-            <p className="mt-1 font-semibold text-white">{profile.tss_credits}</p>
+          <div className="rounded-2xl bg-black/30 p-4 flex items-center justify-center">
+             <span className="text-xs text-zinc-400">More items needed?</span>
           </div>
         </div>
 
-        <button
-          onClick={handleConvertCredits}
-          disabled={loading || profile.credits < 20}
-          className="secondary-button mt-6 w-full gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <ArrowRightLeft className="h-4 w-4" />
-          Convert 20 Credits into 1 TSS
-        </button>
-
-        {profile.credits < 20 ? (
-          <p className="mt-3 text-sm text-zinc-400">You need at least 20 credits to convert.</p>
-        ) : null}
-        {actionError ? <p className="mt-3 text-sm text-red-200">{actionError}</p> : null}
-        {profile?.stripe_customer_id ? (
-          <button
-            className="panel mt-4 w-full text-left p-4 border border-red-400/20 rounded-md bg-red-400/5 text-sm text-red-200 transition hover:border-red-400/40"
-            onClick={handleManagePortal}
-          >
-            Cancel / Manage Subscription
-          </button>
-        ) : null}
+        {processingPayment && (
+          <div className="mt-6 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-center">
+            <p className="text-sm text-yellow-200">Processing your payment...</p>
+            <p className="mt-1 text-xs text-zinc-400">Please wait while we confirm your purchase.</p>
+          </div>
+        )}
+        {syncError && <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-200">{syncError}</div>}
+        {syncResult?.synced && (
+          <div className="mt-4 rounded-2xl border border-green-400/20 bg-green-400/5 p-3 text-sm text-green-200">
+            Purchase successful! Added {syncResult.addedCredits} Credits & {syncResult.addedTss} TSS.
+          </div>
+        )}
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center gap-2 text-sm text-zinc-300">
-          <Sparkles className="h-4 w-4 text-yellow-300" />
-          Upgrade your tier
+      {/* Store Section */}
+      <section className="space-y-8">
+        {/* Bundles (Best Value) */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Crown className="h-5 w-5 text-yellow-300" />
+            <h2 className="text-lg font-semibold text-white">Bundles (Best Value)</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {(['bundle_standard', 'bundle_pro', 'bundle_chef', 'bundle_unstoppable'] as const).map((key) => (
+              <ProductCard key={key} productKey={key} onClick={handlePurchase} />
+            ))}
+          </div>
         </div>
 
-        {!hasAnyPriceConfigured ? (
-          <p className="mt-2 text-sm text-zinc-400">Upgrade pricing is not configured in this environment.</p>
-        ) : null}
-
-        {hasSubscription ? (
-          <div className="panel w-full p-4 text-left border border-yellow-400/20 bg-yellow-400/10 rounded-2xl">
-            <p className="text-sm text-yellow-100">You already subscribed to another plan. Choosing a new plan below will replace your current one.</p>
+        {/* Credits */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Bolt className="h-5 w-5 text-yellow-300" />
+            <h2 className="text-lg font-semibold text-white">Credit Packs</h2>
           </div>
-        ) : null}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(['credit_60', 'credit_200', 'credit_450'] as const).map((key) => (
+              <ProductCard key={key} productKey={key} onClick={handlePurchase} />
+            ))}
+          </div>
+        </div>
 
-        {(['standard', 'pro', 'chef'] as const).map((planTier) => {
-          const config = STRIPE_TIERS[planTier];
-          const isActive = tier === planTier;
-
-          return (
-            <button
-              key={planTier}
-              onClick={() => handleUpgrade(planTier)}
-              className={`panel w-full p-5 text-left transition ${isActive ? 'border-yellow-400/30 bg-yellow-400/10' : ''}`}
-              disabled={!hasAnyPriceConfigured}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Crown className="h-4 w-4 text-yellow-300" />
-                    <span className="text-lg font-semibold text-white">{config.label}</span>
-                  </div>
-                  <p className="mt-2 text-sm text-zinc-400">
-                    {config.credits} credits / {config.tss_credits} TSS / {config.itemLimit} items
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-semibold text-white">${config.price}</p>
-                  <p className="text-xs text-zinc-500">per month</p>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between rounded-2xl bg-black/30 px-4 py-3 text-sm text-zinc-300">
-                <span>{Math.round(config.discount * 100)}% discount / {config.recipeSuggestions} suggestions</span>
-                <span className={isActive ? 'text-yellow-200' : 'text-zinc-500'}>{isActive ? 'Current plan' : isActiveSubscription ? 'Switch' : 'Upgrade'}</span>
-              </div>
-            </button>
-          );
-        })}
+        {/* TSS Packs */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Zap className="h-5 w-5 text-yellow-300" />
+            <h2 className="text-lg font-semibold text-white">TSS Credit Packs</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(['tss_3', 'tss_10', 'tss_25'] as const).map((key) => (
+              <ProductCard key={key} productKey={key} onClick={handlePurchase} />
+            ))}
+          </div>
+        </div>
       </section>
     </div>
+  );
+}
+
+function ProductCard({ productKey, onClick }: { productKey: keyof typeof PRODUCTS; onClick: (key: typeof productKey) => void }) {
+  const product = PRODUCTS[productKey];
+  const priceEnvKey = product.envKey;
+  // In Next.js client components we can't read env directly, so we pass a simple ID to backend which maps it
+  // BUT backend needs the Price ID. 
+  // Let's use a proxy ID that backend knows, or pass the Env Key? 
+  // Actually, better: The backend has the map. We send `productKey` and backend looks up price ID from its own config.
+  
+  return (
+    <button 
+      onClick={() => onClick(productKey)}
+      className="panel w-full p-5 text-left transition group hover:border-yellow-400/30 hover:bg-yellow-400/5"
+    >
+      <div className="flex justify-between items-start">
+        <span className="text-sm font-medium text-zinc-300">{product.label}</span>
+        <span className="text-lg font-bold text-white">${product.price}</span>
+      </div>
+      <p className="mt-2 text-sm text-zinc-500">{product.description}</p>
+      <div className="mt-4 flex items-center justify-between text-xs text-zinc-600">
+        <span>Instant delivery</span>
+        <span className="group-hover:text-yellow-300 transition">Buy Now &rarr;</span>
+      </div>
+    </button>
   );
 }
